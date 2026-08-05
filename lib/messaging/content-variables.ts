@@ -47,7 +47,17 @@ export function normalizeMediaFileName(
     }
 
     try {
-      const segments = new URL(value).pathname.split("/").filter(Boolean)
+      const url = new URL(value)
+      const base = new URL(baseUrl)
+
+      if (url.origin === base.origin) {
+        const basePath = base.pathname.replace(/\/$/, "")
+        if (basePath && url.pathname.startsWith(`${basePath}/`)) {
+          return url.pathname.slice(basePath.length + 1)
+        }
+      }
+
+      const segments = url.pathname.split("/").filter(Boolean)
       return segments.at(-1) ?? value
     } catch {
       return value
@@ -124,11 +134,6 @@ export function resolveMediaFileName(
   templateMediaFileName?: string | null,
   mediaBaseUrl?: string | null
 ) {
-  const campaignValue = campaignMediaFileName?.trim()
-  if (campaignValue && isAbsoluteMediaUrl(campaignValue)) {
-    return campaignValue
-  }
-
   return (
     normalizeMediaFileName(campaignMediaFileName, mediaBaseUrl) ||
     normalizeMediaFileName(templateMediaFileName, mediaBaseUrl)
@@ -151,9 +156,14 @@ export function buildContentVariablesForEmployee(
 
   const mediaValue = options.mediaFileName?.trim()
   if (mediaValue) {
-    variables["2"] = isAbsoluteMediaUrl(mediaValue)
-      ? mediaValue
-      : normalizeMediaFileName(mediaValue, options.mediaBaseUrl)!
+    const twilioMediaPath = normalizeMediaFileName(
+      mediaValue,
+      options.mediaBaseUrl
+    )
+    if (twilioMediaPath) {
+      // La plantilla de Twilio ya concatena mediaBaseUrl + {{2}}.
+      variables["2"] = twilioMediaPath
+    }
   }
 
   return Object.keys(variables).length > 0 ? variables : undefined
