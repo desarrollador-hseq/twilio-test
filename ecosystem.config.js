@@ -3,7 +3,7 @@ module.exports = {
       name: "TWILIO WHATSAPP TEST",
       script: "tsx",
       args: "start",
-      cwd: "/home/userhseq/apps/grupohseq/test.grupohseq.com",
+      cwd: "/home/userhseq/apps/grupohseq/twilio-test",
       env: {
         NODE_ENV: "production",
         PORT: 3030
