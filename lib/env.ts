@@ -1,5 +1,10 @@
 export function getAppUrl() {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  // APP_URL y AUTH_URL se leen en runtime (ideal para PM2/producción).
+  // NEXT_PUBLIC_APP_URL se embebe en el build y puede quedar desactualizado.
+  const configured =
+    process.env.APP_URL?.trim() ||
+    process.env.AUTH_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim()
 
   if (configured) {
     return configured.replace(/\/$/, "")
