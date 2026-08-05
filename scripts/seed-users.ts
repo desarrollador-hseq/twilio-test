@@ -10,15 +10,15 @@ const prisma = new PrismaClient({
 
 const defaultUsers = [
   {
-    email: "admin@example.com",
+    email: "desarrollador@grupohseq.com",
     name: "Administrador",
-    password: "admin123",
+    password: "desarrollador123.",
     role: "ADMIN" as const,
   },
   {
-    email: "user@example.com",
-    name: "Usuario",
-    password: "user123",
+    email: "consultor@grupohseq.com",
+    name: "Consultor",
+    password: "consultor123",
     role: "USER" as const,
   },
 ]
