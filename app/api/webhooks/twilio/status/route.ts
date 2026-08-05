@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Prisma } from "@/lib/generated/prisma/client"
+
 import { prisma } from "@/lib/prisma"
 import { TWILIO_STATUS_MAP } from "@/lib/messaging/constants"
-import { parseTwilioFormData } from "@/lib/messaging/parse-twilio-form-data"
+import { parseTwilioFormData, formDataToRecord } from "@/lib/messaging/parse-twilio-form-data"
 import { formatTwilioDeliveryError } from "@/lib/twilio-errors"
 
 export async function GET() {
@@ -53,21 +53,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await prisma.message.update({
+    const updated = await prisma.message.updateMany({
       where: { messageSid },
       data: updateData,
     })
 
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
-      // Twilio reintenta si respondemos error; un SID desconocido no debe tumbar el webhook.
+    const recentMessages = await prisma.message.findMany({
+      where: { messageSid: { not: null } },
+      select: { id: true, messageSid: true, status: true },
+      orderBy: { id: "desc" },
+      take: 5,
+    })
+
+    console.info("[twilio/status]", {
+      messageSid,
+      messageStatus,
+      mappedStatus,
+      updatedCount: updated.count,
+      payload: formDataToRecord(formData),
+      recentMessageSidsInDb: recentMessages,
+    })
+
+    if (updated.count === 0) {
       return NextResponse.json({ ok: true, skipped: "message not found" })
     }
 
+    return NextResponse.json({ ok: true })
+  } catch (error) {
     console.error("[twilio/status] Error al actualizar mensaje:", error)
 
     return NextResponse.json(

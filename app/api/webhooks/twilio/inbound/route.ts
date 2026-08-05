@@ -7,7 +7,7 @@ import {
   parseInboundKeyword,
   twimlResponse,
 } from "@/lib/messaging/opt-out"
-import { parseTwilioFormData } from "@/lib/messaging/parse-twilio-form-data"
+import { parseTwilioFormData, formDataToRecord } from "@/lib/messaging/parse-twilio-form-data"
 import { normalizePhoneToE164 } from "@/lib/phone"
 
 function xmlResponse(message: string) {
@@ -29,6 +29,16 @@ export async function POST(request: NextRequest) {
     const formData = await parseTwilioFormData(request)
     const from = formData.get("From")?.toString() ?? ""
     const body = formData.get("Body")?.toString() ?? ""
+    const messageSid = formData.get("MessageSid")?.toString() ?? null
+    const smsMessageSid = formData.get("SmsMessageSid")?.toString() ?? null
+
+    console.info("[twilio/inbound]", {
+      messageSid,
+      smsMessageSid,
+      from,
+      body,
+      payload: formDataToRecord(formData),
+    })
 
     if (!from) {
       return NextResponse.json({ error: "Payload inválido" }, { status: 400 })

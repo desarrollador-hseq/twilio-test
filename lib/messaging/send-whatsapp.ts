@@ -30,5 +30,12 @@ export async function sendWhatsAppMessage({
     ...(statusCallback ? { statusCallback } : {}),
   })
 
+  console.info("[twilio/send]", {
+    messageSid: message.sid,
+    to: message.to,
+    status: message.status,
+    statusCallback,
+  })
+
   return message
 }

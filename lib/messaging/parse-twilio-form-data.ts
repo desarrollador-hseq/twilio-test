@@ -28,3 +28,9 @@ export async function parseTwilioFormData(request: NextRequest) {
 
   return paramsToFormData(new URLSearchParams(rawBody))
 }
+
+export function formDataToRecord(formData: FormData) {
+  return Object.fromEntries(
+    [...formData.entries()].map(([key, value]) => [key, value.toString()])
+  )
+}
