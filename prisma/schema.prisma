@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  // La ruta en DATABASE_URL es relativa a esta carpeta (prisma/).
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Company {
+  id        Int        @id @default(autoincrement())
+  legalName String
+  taxId     String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+  employees Employee[]
+  templates Template[]
+  campaigns Campaign[]
+
+  @@index([deletedAt])
+}
+
+model Employee {
+  id               Int       @id @default(autoincrement())
+  companyId        Int
+  firstName        String
+  lastName         String
+  nationalId       String
+  mobilePhone      String
+  email            String
+  active           Boolean   @default(true)
+  canSendWhatsapp    Boolean   @default(true)
+  canSendEmail       Boolean   @default(true)
+  unsubscribedAt     DateTime?
+  unsubscribeReason  String?
+  createdAt          DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  company          Company   @relation(fields: [companyId], references: [id])
+  messages         Message[]
+
+  @@unique([companyId, nationalId])
+  @@index([companyId])
+  @@index([deletedAt])
+  @@index([active])
+}
+
+model Template {
+  id             Int        @id @default(autoincrement())
+  contentSid     String     @unique
+  friendlyName   String
+  language       String     @default("es")
+  category       String?
+  type           String     @default("whatsapp")
+  status         String     @default("approved")
+  mediaBaseUrl   String?
+  mediaFileName  String?
+  companyId      Int?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+  company      Company?   @relation(fields: [companyId], references: [id])
+  campaigns    Campaign[]
+  messages     Message[]
+
+  @@index([companyId])
+  @@index([deletedAt])
+  @@index([status])
+}
+
+model Campaign {
+  id               Int       @id @default(autoincrement())
+  name             String
+  companyId        Int
+  templateId       Int
+  channel          String    @default("whatsapp")
+  status           String    @default("draft")
+  mediaFileName    String?
+  contentVariables String?
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  company     Company   @relation(fields: [companyId], references: [id])
+  template    Template  @relation(fields: [templateId], references: [id])
+  messages    Message[]
+
+  @@index([companyId])
+  @@index([deletedAt])
+  @@index([status])
+}
+
+model Message {
+  id               Int       @id @default(autoincrement())
+  campaignId       Int?
+  employeeId       Int
+  templateId       Int
+  messageSid       String?   @unique
+  status           String    @default("queued")
+  errorMessage     String?
+  contentVariables String?
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  campaign         Campaign? @relation(fields: [campaignId], references: [id])
+  employee         Employee  @relation(fields: [employeeId], references: [id])
+  template         Template  @relation(fields: [templateId], references: [id])
+
+  @@index([campaignId])
+  @@index([employeeId])
+  @@index([status])
+}

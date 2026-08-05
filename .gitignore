@@ -30,7 +30,17 @@ pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# sqlite
+/prisma/*.db
+/prisma/*.db-journal
+
+# prisma client generado
+/lib/generated/prisma
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/lib/generated/prisma
