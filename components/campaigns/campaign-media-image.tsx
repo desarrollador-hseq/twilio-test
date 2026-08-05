@@ -8,6 +8,7 @@ type CampaignMediaImageProps = {
   mediaFileName?: string | null
   mediaBaseUrl?: string | null
   source?: MediaSource | null
+  mediaKind?: "image" | "video" | "auto"
   size?: "sm" | "md" | "lg"
   showMeta?: boolean
   className?: string
@@ -19,10 +20,15 @@ const sizeClasses = {
   lg: "max-h-56 w-full max-w-sm",
 }
 
+function detectMediaKind(url: string): "image" | "video" {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url) ? "video" : "image"
+}
+
 export function CampaignMediaImage({
   mediaFileName,
   mediaBaseUrl,
   source,
+  mediaKind = "auto",
   size = "md",
   showMeta = false,
   className,
@@ -33,25 +39,39 @@ export function CampaignMediaImage({
     return <span className="text-xs text-muted-foreground">—</span>
   }
 
+  const resolvedKind =
+    mediaKind === "auto" ? detectMediaKind(url) : mediaKind
+
   return (
     <div className={cn("space-y-1", className)}>
       <a href={url} target="_blank" rel="noreferrer" className="inline-block">
-        <img
-          src={url}
-          alt={mediaFileName ?? "Imagen de campaña"}
-          className={cn(
-            "rounded-md border object-cover",
-            sizeClasses[size]
-          )}
-        />
+        {resolvedKind === "video" ? (
+          <video
+            src={url}
+            controls
+            className={cn(
+              "rounded-md border object-cover",
+              sizeClasses[size]
+            )}
+          />
+        ) : (
+          <img
+            src={url}
+            alt={mediaFileName ?? "Multimedia de campaña"}
+            className={cn(
+              "rounded-md border object-cover",
+              sizeClasses[size]
+            )}
+          />
+        )}
       </a>
       {showMeta && (
-        <p className="text-xs text-muted-foreground">
+        <p className="break-all text-xs text-muted-foreground">
           {source === "campaign"
             ? "Campaña"
             : source === "template"
               ? "Plantilla"
-              : "Imagen"}
+              : "Multimedia"}
           {" · "}
           <code>{mediaFileName}</code>
         </p>

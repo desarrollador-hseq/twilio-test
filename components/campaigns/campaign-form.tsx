@@ -1,10 +1,11 @@
 "use client"
 
-import { useActionState, useMemo, useState } from "react"
+import { useActionState, useEffect, useMemo, useState } from "react"
 
 import type { ActionState } from "@/lib/actions/types"
 import { CampaignMediaImage } from "@/components/campaigns/campaign-media-image"
 import { resolveMediaSource } from "@/lib/messaging/content-variables"
+import { validateCampaignMediaFile } from "@/lib/storage/media-validation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,7 +53,9 @@ export function CampaignForm({
   const [state, formAction, pending] = useActionState(action, initialState)
   const [selectedCompanyId, setSelectedCompanyId] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
-  const [mediaOverride, setMediaOverride] = useState("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
 
   const availableTemplates = useMemo(() => {
     if (!selectedCompanyId) {
@@ -78,11 +81,45 @@ export function CampaignForm({
     )
   }, [availableTemplates, selectedTemplateId])
 
-  const previewMedia = resolveMediaSource(
-    mediaOverride,
+  const templatePreview = resolveMediaSource(
+    null,
     selectedTemplate?.mediaFileName,
     selectedTemplate?.mediaBaseUrl
   )
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setLocalPreviewUrl(null)
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(selectedFile)
+    setLocalPreviewUrl(objectUrl)
+
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }, [selectedFile])
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null
+    setFileError(null)
+
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+
+    const validation = validateCampaignMediaFile(file)
+    if (!validation.ok) {
+      setSelectedFile(null)
+      setFileError(validation.error)
+      event.target.value = ""
+      return
+    }
+
+    setSelectedFile(file)
+  }
 
   return (
     <Card className="max-w-2xl">
@@ -171,35 +208,52 @@ export function CampaignForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="mediaFileName">
-              Archivo de imagen (opcional)
+            <Label htmlFor="mediaFile">
+              Archivo multimedia (opcional)
             </Label>
             <Input
-              id="mediaFileName"
-              name="mediaFileName"
-              value={mediaOverride}
-              onChange={(e) => setMediaOverride(e.target.value)}
-              placeholder={
-                selectedTemplate?.mediaFileName ??
-                "jor-ambiental-ghseq.png"
-              }
+              id="mediaFile"
+              name="mediaFile"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
+              onChange={handleFileChange}
             />
-            {previewMedia.fileName && (
+            {fileError && (
+              <p className="text-sm text-destructive">{fileError}</p>
+            )}
+            {localPreviewUrl && selectedFile && (
               <CampaignMediaImage
-                mediaFileName={previewMedia.fileName}
-                mediaBaseUrl={selectedTemplate?.mediaBaseUrl}
-                source={previewMedia.source}
+                mediaFileName={localPreviewUrl}
+                source="campaign"
+                mediaKind={
+                  selectedFile.type.startsWith("video/") ? "video" : "image"
+                }
                 size="lg"
                 showMeta
               />
             )}
+            {!localPreviewUrl && templatePreview.fileName && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Vista previa de la plantilla (se usa si no subes archivo):
+                </p>
+                <CampaignMediaImage
+                  mediaFileName={templatePreview.fileName}
+                  mediaBaseUrl={selectedTemplate?.mediaBaseUrl}
+                  source={templatePreview.source}
+                  size="lg"
+                  showMeta
+                />
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
-              Solo el nombre del archivo (ej. <code>jor-ambiental-ghseq.png</code>),
-              no la URL completa. Si lo dejas vacío, se usa el de la plantilla
+              Imagen (JPG, PNG, GIF, WEBP hasta 5 MB) o video (MP4, WEBM, MOV
+              hasta 16 MB). Se sube a DigitalOcean Spaces y la URL queda
+              guardada en la campaña. Si no subes archivo, se usa el de la
+              plantilla
               {selectedTemplate?.mediaFileName ? (
                 <>
-                  :{" "}
-                  <code>{selectedTemplate.mediaFileName}</code>
+                  : <code>{selectedTemplate.mediaFileName}</code>
                 </>
               ) : (
                 "."
@@ -210,7 +264,7 @@ export function CampaignForm({
           </div>
         </CardContent>
         <CardFooter className="gap-2 border-t">
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending || Boolean(fileError)}>
             {pending ? "Creando..." : submitLabel}
           </Button>
           <Button variant="outline" asChild>

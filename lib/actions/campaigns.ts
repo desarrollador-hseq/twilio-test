@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import type { ActionState } from "@/lib/actions/types"
-import { isTwilioConfigured } from "@/lib/env"
+import { isSpacesConfigured, isTwilioConfigured } from "@/lib/env"
 import { sendWhatsAppMessage } from "@/lib/messaging/send-whatsapp"
 import { formatTwilioError } from "@/lib/twilio-errors"
 import { CAMPAIGN_CHANNELS } from "@/lib/messaging/constants"
@@ -13,6 +13,7 @@ import {
   resolveMediaFileName,
 } from "@/lib/messaging/content-variables"
 import { syncMissingTwilioMessageErrors } from "@/lib/messaging/sync-message-errors"
+import { uploadCampaignMedia } from "@/lib/storage/spaces"
 
 function parseCampaignForm(formData: FormData) {
   const companyId = Number(formData.get("companyId"))
@@ -23,7 +24,6 @@ function parseCampaignForm(formData: FormData) {
     companyId,
     templateId,
     channel: formData.get("channel")?.toString().trim() || "whatsapp",
-    mediaFileName: formData.get("mediaFileName")?.toString().trim() || null,
     contentVariables: null,
   }
 }
@@ -115,13 +115,29 @@ export async function createCampaign(
     return { error: "La plantilla no es compatible con WhatsApp." }
   }
 
-  const mediaFileName = input.mediaFileName
-    ? resolveMediaFileName(
-        input.mediaFileName,
-        null,
-        template.mediaBaseUrl
-      )
-    : null
+  const mediaFile = formData.get("mediaFile")
+  let mediaFileName: string | null = null
+
+  if (mediaFile instanceof File && mediaFile.size > 0) {
+    if (!isSpacesConfigured()) {
+      return {
+        error:
+          "DigitalOcean Spaces no está configurado. Revisa DO_SPACES_KEY, DO_SPACES_SECRET, DO_SPACES_BUCKET y DO_SPACES_REGION.",
+      }
+    }
+
+    try {
+      mediaFileName = await uploadCampaignMedia(mediaFile)
+    } catch (error) {
+      console.error("uploadCampaignMedia failed:", error)
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "No se pudo subir el archivo multimedia.",
+      }
+    }
+  }
 
   let campaignId: number
 

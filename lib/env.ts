@@ -60,3 +60,48 @@ export function isTwilioConfigured() {
       hasSender
   )
 }
+
+export function getSpacesCdnUrl() {
+  return (
+    process.env.DO_SPACES_CDN_URL?.trim() ||
+    "https://grupohseq.sfo2.cdn.digitaloceanspaces.com"
+  )
+}
+
+export function getSpacesPrefix() {
+  const prefix =
+    process.env.DO_SPACES_PREFIX?.trim() || "ccomercial/campaigns"
+  return prefix.replace(/^\/+|\/+$/g, "")
+}
+
+export function isSpacesConfigured() {
+  return Boolean(
+    process.env.DO_SPACES_KEY?.trim() &&
+      process.env.DO_SPACES_SECRET?.trim() &&
+      process.env.DO_SPACES_BUCKET?.trim() &&
+      process.env.DO_SPACES_REGION?.trim()
+  )
+}
+
+export function getSpacesConfig() {
+  const region = process.env.DO_SPACES_REGION?.trim()
+  const bucket = process.env.DO_SPACES_BUCKET?.trim()
+
+  if (!isSpacesConfigured() || !region || !bucket) {
+    throw new Error("DigitalOcean Spaces no está configurado.")
+  }
+
+  const endpoint =
+    process.env.DO_SPACES_ENDPOINT?.trim() ||
+    `https://${region}.digitaloceanspaces.com`
+
+  return {
+    accessKeyId: process.env.DO_SPACES_KEY!.trim(),
+    secretAccessKey: process.env.DO_SPACES_SECRET!.trim(),
+    bucket,
+    region,
+    endpoint,
+    cdnUrl: getSpacesCdnUrl(),
+    prefix: getSpacesPrefix(),
+  }
+}

@@ -80,7 +80,7 @@ export default async function CampanaDetallePage({
               <p className="font-mono text-xs">{campaign.template.contentSid}</p>
             </div>
             <div className="sm:col-span-2 lg:col-span-1">
-              <p className="mb-2 text-xs text-muted-foreground">Imagen</p>
+              <p className="mb-2 text-xs text-muted-foreground">Multimedia</p>
               <CampaignMediaImage
                 mediaFileName={media.fileName}
                 mediaBaseUrl={campaign.template.mediaBaseUrl}

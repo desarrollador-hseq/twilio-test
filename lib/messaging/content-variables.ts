@@ -1,5 +1,14 @@
-export const DEFAULT_MEDIA_BASE_URL =
-  "https://grupohseq.sfo2.cdn.digitaloceanspaces.com/ccomercial/"
+import { getSpacesCdnUrl } from "@/lib/env"
+
+export const DEFAULT_MEDIA_BASE_URL = `${getSpacesCdnUrl().replace(/\/$/, "")}/ccomercial/`
+
+function isAbsoluteMediaUrl(value: string) {
+  return (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("blob:")
+  )
+}
 
 /** @deprecated Usa DEFAULT_MEDIA_BASE_URL */
 export const MEDIA_CDN_BASE_URL = DEFAULT_MEDIA_BASE_URL
@@ -56,13 +65,18 @@ export function buildMediaUrl(
   mediaFileName?: string | null,
   mediaBaseUrl?: string | null
 ) {
-  const fileName = normalizeMediaFileName(mediaFileName, mediaBaseUrl)
-  if (!fileName) {
+  const value = mediaFileName?.trim()
+  if (!value) {
     return null
   }
 
-  if (fileName.startsWith("http://") || fileName.startsWith("https://")) {
-    return fileName
+  if (isAbsoluteMediaUrl(value)) {
+    return value
+  }
+
+  const fileName = normalizeMediaFileName(value, mediaBaseUrl)
+  if (!fileName) {
+    return null
   }
 
   return `${resolveMediaBaseUrl(mediaBaseUrl)}${fileName}`
@@ -73,12 +87,19 @@ export function resolveMediaSource(
   templateMediaFileName?: string | null,
   mediaBaseUrl?: string | null
 ): { fileName: string | null; source: MediaSource | null } {
-  const campaignFileName = normalizeMediaFileName(
-    campaignMediaFileName,
-    mediaBaseUrl
-  )
-  if (campaignFileName) {
-    return { fileName: campaignFileName, source: "campaign" }
+  const campaignValue = campaignMediaFileName?.trim()
+  if (campaignValue) {
+    if (isAbsoluteMediaUrl(campaignValue)) {
+      return { fileName: campaignValue, source: "campaign" }
+    }
+
+    const campaignFileName = normalizeMediaFileName(
+      campaignMediaFileName,
+      mediaBaseUrl
+    )
+    if (campaignFileName) {
+      return { fileName: campaignFileName, source: "campaign" }
+    }
   }
 
   const templateFileName = normalizeMediaFileName(
@@ -103,6 +124,11 @@ export function resolveMediaFileName(
   templateMediaFileName?: string | null,
   mediaBaseUrl?: string | null
 ) {
+  const campaignValue = campaignMediaFileName?.trim()
+  if (campaignValue && isAbsoluteMediaUrl(campaignValue)) {
+    return campaignValue
+  }
+
   return (
     normalizeMediaFileName(campaignMediaFileName, mediaBaseUrl) ||
     normalizeMediaFileName(templateMediaFileName, mediaBaseUrl)
@@ -123,12 +149,11 @@ export function buildContentVariablesForEmployee(
     variables["1"] = employeeName
   }
 
-  const mediaFileName = normalizeMediaFileName(
-    options.mediaFileName,
-    options.mediaBaseUrl
-  )
-  if (mediaFileName) {
-    variables["2"] = mediaFileName
+  const mediaValue = options.mediaFileName?.trim()
+  if (mediaValue) {
+    variables["2"] = isAbsoluteMediaUrl(mediaValue)
+      ? mediaValue
+      : normalizeMediaFileName(mediaValue, options.mediaBaseUrl)!
   }
 
   return Object.keys(variables).length > 0 ? variables : undefined
