@@ -7,6 +7,7 @@ import { CampaignMediaImage } from "@/components/campaigns/campaign-media-image"
 import { resolveMediaSource } from "@/lib/messaging/content-variables"
 import { validateCampaignMediaFile } from "@/lib/storage/media-validation"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/card"
 
 type CompanyOption = { id: number; legalName: string }
+type AreaOption = { id: number; name: string; companyId: number }
 type TemplateOption = {
   id: number
   friendlyName: string
@@ -33,6 +35,7 @@ type CampaignFormProps = {
     formData: FormData
   ) => Promise<ActionState>
   companies: CompanyOption[]
+  areas: AreaOption[]
   templates: TemplateOption[]
   submitLabel: string
   cancelHref: string
@@ -46,6 +49,7 @@ const selectClassName =
 export function CampaignForm({
   action,
   companies,
+  areas,
   templates,
   submitLabel,
   cancelHref,
@@ -53,6 +57,8 @@ export function CampaignForm({
   const [state, formAction, pending] = useActionState(action, initialState)
   const [selectedCompanyId, setSelectedCompanyId] = useState("")
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
+  const [areaScope, setAreaScope] = useState<"all" | "selected">("all")
+  const [selectedAreaIds, setSelectedAreaIds] = useState<number[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
@@ -68,6 +74,12 @@ export function CampaignForm({
         template.companyId === null || template.companyId === companyId
     )
   }, [selectedCompanyId, templates])
+
+  const companyAreas = useMemo(() => {
+    if (!selectedCompanyId) return []
+    const companyId = Number(selectedCompanyId)
+    return areas.filter((area) => area.companyId === companyId)
+  }, [areas, selectedCompanyId])
 
   const selectedTemplate = useMemo(() => {
     if (!selectedTemplateId) {
@@ -121,6 +133,15 @@ export function CampaignForm({
     setSelectedFile(file)
   }
 
+  function toggleArea(areaId: number, checked: boolean) {
+    setSelectedAreaIds((current) => {
+      if (checked) {
+        return current.includes(areaId) ? current : [...current, areaId]
+      }
+      return current.filter((id) => id !== areaId)
+    })
+  }
+
   return (
     <Card className="max-w-2xl">
       <form action={formAction}>
@@ -156,6 +177,8 @@ export function CampaignForm({
                 onChange={(e) => {
                   setSelectedCompanyId(e.target.value)
                   setSelectedTemplateId("")
+                  setAreaScope("all")
+                  setSelectedAreaIds([])
                 }}
               >
                 <option value="" disabled>
@@ -192,6 +215,82 @@ export function CampaignForm({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-md border p-4">
+            <div className="space-y-1">
+              <Label>Destinatarios por área</Label>
+              <p className="text-xs text-muted-foreground">
+                Elige si el envío va a toda la empresa o solo a áreas
+                específicas.
+              </p>
+            </div>
+
+            <input type="hidden" name="areaScope" value={areaScope} />
+
+            <div className="space-y-2">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="radio"
+                  className="mt-1"
+                  checked={areaScope === "all"}
+                  disabled={!selectedCompanyId}
+                  onChange={() => {
+                    setAreaScope("all")
+                    setSelectedAreaIds([])
+                  }}
+                />
+                <span>
+                  <span className="font-medium">Todas las áreas</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Empleados elegibles de toda la empresa.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="radio"
+                  className="mt-1"
+                  checked={areaScope === "selected"}
+                  disabled={!selectedCompanyId || companyAreas.length === 0}
+                  onChange={() => setAreaScope("selected")}
+                />
+                <span>
+                  <span className="font-medium">Áreas seleccionadas</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {companyAreas.length === 0
+                      ? "Esta empresa aún no tiene áreas."
+                      : "Marca una o más áreas de la empresa."}
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {areaScope === "selected" && companyAreas.length > 0 && (
+              <div className="space-y-2 rounded-md border border-dashed p-3">
+                {companyAreas.map((area) => {
+                  const checked = selectedAreaIds.includes(area.id)
+                  return (
+                    <label
+                      key={area.id}
+                      className="flex items-center gap-3 text-sm"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) =>
+                          toggleArea(area.id, value === true)
+                        }
+                      />
+                      <span>{area.name}</span>
+                      {checked && (
+                        <input type="hidden" name="areaIds" value={area.id} />
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

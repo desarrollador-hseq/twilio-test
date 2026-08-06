@@ -3,13 +3,22 @@ export const dynamic = "force-dynamic"
 import { createCampaign } from "@/lib/actions/campaigns"
 import { getCompanies } from "@/lib/actions/companies"
 import { getApprovedTemplates } from "@/lib/actions/templates"
+import { prisma } from "@/lib/prisma"
 import { AppShell } from "@/components/app-shell"
 import { CampaignForm } from "@/components/campaigns/campaign-form"
 
 export default async function NuevaCampanaPage() {
-  const [companies, templates] = await Promise.all([
+  const [companies, templates, areas] = await Promise.all([
     getCompanies(),
     getApprovedTemplates(),
+    prisma.area.findMany({
+      where: {
+        deletedAt: null,
+        company: { deletedAt: null },
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, companyId: true },
+    }),
   ])
 
   return (
@@ -20,6 +29,7 @@ export default async function NuevaCampanaPage() {
       <CampaignForm
         action={createCampaign}
         companies={companies}
+        areas={areas}
         templates={templates.map((t) => ({
           id: t.id,
           friendlyName: t.friendlyName,
