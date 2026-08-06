@@ -1,5 +1,9 @@
 import * as XLSX from "xlsx"
 
+import {
+  normalizeNationalId,
+  nationalIdValidationError,
+} from "@/lib/national-id"
 import { isValidE164Phone, normalizePhoneToE164 } from "@/lib/phone"
 
 export type ExcelEmployeeRow = {
@@ -243,7 +247,7 @@ export function parseEmployeesExcel(buffer: Buffer): {
     const fullName = String(values.fullName ?? "").trim()
     let firstName = String(values.firstName ?? "").trim()
     let lastName = String(values.lastName ?? "").trim()
-    const nationalId = String(values.nationalId ?? "").trim()
+    const nationalId = normalizeNationalId(String(values.nationalId ?? ""))
     const email = String(values.email ?? "").trim()
     const areaName = String(values.areaName ?? "").trim()
     const rawPhone = String(values.mobilePhone ?? "").trim()
@@ -266,12 +270,18 @@ export function parseEmployeesExcel(buffer: Buffer): {
 
     const phoneResult = parsePhoneCell(rawPhone)
 
-    if (!firstName || !lastName || !nationalId || !email || !areaName) {
+    if (!firstName || !lastName || !email || !areaName) {
       errors.push({
         rowNumber,
         message:
-          "Faltan campos obligatorios (nombres/apellidos, cédula, correo o área).",
+          "Faltan campos obligatorios (nombres/apellidos, correo o área).",
       })
+      continue
+    }
+
+    const nationalIdError = nationalIdValidationError(nationalId)
+    if (nationalIdError) {
+      errors.push({ rowNumber, message: nationalIdError })
       continue
     }
 

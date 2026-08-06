@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form"
 
 import type { ActionState } from "@/lib/actions/types"
 import { unsubscribeReasonLabel } from "@/lib/labels"
+import { normalizeNationalId } from "@/lib/national-id"
 import { normalizePhoneForInput } from "@/lib/phone"
 import { PhoneInputForm } from "@/components/phone-input-form"
 import { Button } from "@/components/ui/button"
@@ -95,7 +96,7 @@ function buildFormData(values: EmployeeFormValues) {
 
   formData.append("firstName", values.firstName)
   formData.append("lastName", values.lastName)
-  formData.append("nationalId", values.nationalId)
+  formData.append("nationalId", normalizeNationalId(values.nationalId))
   formData.append("mobilePhone", values.mobilePhone)
   formData.append("email", values.email)
 
@@ -131,7 +132,7 @@ export function EmployeeForm({
     defaultValues: {
       firstName: defaultValues?.firstName ?? "",
       lastName: defaultValues?.lastName ?? "",
-      nationalId: defaultValues?.nationalId ?? "",
+      nationalId: normalizeNationalId(defaultValues?.nationalId ?? ""),
       mobilePhone: normalizePhoneForInput(defaultValues?.mobilePhone),
       email: defaultValues?.email ?? "",
       areaId: defaultValues?.areaId ?? "",
@@ -184,8 +185,27 @@ export function EmployeeForm({
                 <Label htmlFor="nationalId">Cédula</Label>
                 <Input
                   id="nationalId"
-                  {...form.register("nationalId", { required: true })}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="Solo números"
+                  {...form.register("nationalId", {
+                    required: true,
+                    setValueAs: (value) =>
+                      normalizeNationalId(String(value ?? "")),
+                    onChange: (event) => {
+                      const digits = normalizeNationalId(event.target.value)
+                      if (event.target.value !== digits) {
+                        event.target.value = digits
+                      }
+                      form.setValue("nationalId", digits, {
+                        shouldValidate: true,
+                      })
+                    },
+                  })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Se guardan solo números (sin puntos, comas ni espacios).
+                </p>
               </div>
               <PhoneInputForm<EmployeeFormValues>
                 control={form.control}

@@ -7,6 +7,10 @@ import { findOrCreateArea } from "@/lib/actions/areas"
 import type { ActionState } from "@/lib/actions/types"
 import { normalizeAreaName } from "@/lib/areas"
 import { parseEmployeesExcel } from "@/lib/employees/excel-import"
+import {
+  normalizeNationalId,
+  nationalIdValidationError,
+} from "@/lib/national-id"
 import { isValidE164Phone, normalizePhoneToE164 } from "@/lib/phone"
 import { prisma } from "@/lib/prisma"
 
@@ -24,7 +28,9 @@ function parseEmployeeForm(formData: FormData) {
   return {
     firstName: formData.get("firstName")?.toString().trim() ?? "",
     lastName: formData.get("lastName")?.toString().trim() ?? "",
-    nationalId: formData.get("nationalId")?.toString().trim() ?? "",
+    nationalId: normalizeNationalId(
+      formData.get("nationalId")?.toString().trim() ?? ""
+    ),
     mobilePhone: normalizePhoneToE164(
       formData.get("mobilePhone")?.toString().trim() ?? ""
     ),
@@ -38,8 +44,13 @@ function parseEmployeeForm(formData: FormData) {
 }
 
 function validateEmployeeInput(input: ReturnType<typeof parseEmployeeForm>) {
-  if (!input.firstName || !input.lastName || !input.nationalId || !input.email) {
-    return "Nombres, apellidos, cédula y correo son obligatorios."
+  if (!input.firstName || !input.lastName || !input.email) {
+    return "Nombres, apellidos y correo son obligatorios."
+  }
+
+  const nationalIdError = nationalIdValidationError(input.nationalId)
+  if (nationalIdError) {
+    return nationalIdError
   }
 
   if (!input.areaId && !input.areaName) {
@@ -63,6 +74,22 @@ function validateEmployeeInput(input: ReturnType<typeof parseEmployeeForm>) {
   }
 
   return null
+}
+
+async function findEmployeeByNationalId(
+  companyId: number,
+  nationalId: string,
+  excludeEmployeeId?: number
+) {
+  return prisma.employee.findFirst({
+    where: {
+      companyId,
+      nationalId,
+      deletedAt: null,
+      ...(excludeEmployeeId ? { NOT: { id: excludeEmployeeId } } : {}),
+    },
+    select: { id: true, firstName: true, lastName: true, nationalId: true },
+  })
 }
 
 async function resolveEmployeeArea(
@@ -133,6 +160,13 @@ export async function createEmployee(
     return { error: validationError }
   }
 
+  const duplicate = await findEmployeeByNationalId(companyId, input.nationalId)
+  if (duplicate) {
+    return {
+      error: `Ya existe un empleado con la cédula ${input.nationalId} (${duplicate.firstName} ${duplicate.lastName}).`,
+    }
+  }
+
   const areaResult = await resolveEmployeeArea(companyId, input)
   if (areaResult.error) {
     return { error: areaResult.error }
@@ -181,6 +215,17 @@ export async function updateEmployee(
   const validationError = validateEmployeeInput(input)
   if (validationError) {
     return { error: validationError }
+  }
+
+  const duplicate = await findEmployeeByNationalId(
+    companyId,
+    input.nationalId,
+    employeeId
+  )
+  if (duplicate) {
+    return {
+      error: `Ya existe otro empleado con la cédula ${input.nationalId} (${duplicate.firstName} ${duplicate.lastName}).`,
+    }
   }
 
   const areaResult = await resolveEmployeeArea(companyId, input)
@@ -311,10 +356,13 @@ export async function importEmployeesFromExcel(
 
   const existingEmployees = await prisma.employee.findMany({
     where: { companyId, deletedAt: null },
-    select: { nationalId: true },
+    select: { nationalId: true, firstName: true, lastName: true },
   })
-  const existingNationalIds = new Set(
-    existingEmployees.map((employee) => employee.nationalId)
+  const existingNationalIds = new Map(
+    existingEmployees.map((employee) => [
+      normalizeNationalId(employee.nationalId),
+      employee,
+    ])
   )
 
   const existingAreas = await prisma.area.findMany({
@@ -330,10 +378,12 @@ export async function importEmployeesFromExcel(
   const rowErrors = [...parseErrors]
 
   for (const row of rows) {
-    if (existingNationalIds.has(row.nationalId)) {
+    const nationalId = normalizeNationalId(row.nationalId)
+    const existing = existingNationalIds.get(nationalId)
+    if (existing) {
       rowErrors.push({
         rowNumber: row.rowNumber,
-        message: `Ya existe un empleado con cédula ${row.nationalId}.`,
+        message: `Ya existe un empleado con cédula ${nationalId} (${existing.firstName} ${existing.lastName}).`,
       })
       continue
     }
@@ -367,7 +417,7 @@ export async function importEmployeesFromExcel(
           areaId: area.id,
           firstName: row.firstName,
           lastName: row.lastName,
-          nationalId: row.nationalId,
+          nationalId,
           mobilePhone: row.mobilePhone,
           email: row.email,
           active: true,
@@ -376,13 +426,17 @@ export async function importEmployeesFromExcel(
         },
       })
 
-      existingNationalIds.add(row.nationalId)
+      existingNationalIds.set(nationalId, {
+        nationalId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+      })
       created += 1
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         rowErrors.push({
           rowNumber: row.rowNumber,
-          message: `Ya existe un empleado con cédula ${row.nationalId}.`,
+          message: `Ya existe un empleado con cédula ${nationalId}.`,
         })
         continue
       }
