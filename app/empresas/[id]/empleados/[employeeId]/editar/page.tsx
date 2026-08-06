@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 
 import { notFound } from "next/navigation"
 
+import { getCompanyAreas } from "@/lib/actions/areas"
 import { getCompany } from "@/lib/actions/companies"
 import { getEmployee, updateEmployee } from "@/lib/actions/employees"
 import { AppShell } from "@/components/app-shell"
@@ -27,6 +28,7 @@ export default async function EditarEmpleadoPage({
     notFound()
   }
 
+  const areas = await getCompanyAreas(companyId)
   const updateAction = updateEmployee.bind(null, companyId, employeeId)
 
   return (
@@ -36,12 +38,14 @@ export default async function EditarEmpleadoPage({
     >
       <EmployeeForm
         action={updateAction}
+        areas={areas.map((area) => ({ id: area.id, name: area.name }))}
         defaultValues={{
           firstName: employee.firstName,
           lastName: employee.lastName,
           nationalId: employee.nationalId,
           mobilePhone: employee.mobilePhone,
           email: employee.email,
+          areaId: employee.areaId ? String(employee.areaId) : "",
           active: employee.active,
           canSendWhatsapp: employee.canSendWhatsapp,
           canSendEmail: employee.canSendEmail,

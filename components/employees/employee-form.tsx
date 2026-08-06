@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useActionState } from "react"
+import { startTransition, useActionState, useState } from "react"
 import { useForm } from "react-hook-form"
 
 import type { ActionState } from "@/lib/actions/types"
@@ -20,12 +20,19 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
+type AreaOption = {
+  id: number
+  name: string
+}
+
 type EmployeeFormValues = {
   firstName: string
   lastName: string
   nationalId: string
   mobilePhone: string
   email: string
+  areaId: string
+  areaName: string
   active: boolean
   canSendWhatsapp: boolean
   canSendEmail: boolean
@@ -41,6 +48,7 @@ type EmployeeFormProps = {
     prevState: ActionState,
     formData: FormData
   ) => Promise<ActionState>
+  areas: AreaOption[]
   defaultValues?: Partial<EmployeeFormValues>
   unsubscribeInfo?: UnsubscribeInfo
   submitLabel: string
@@ -48,6 +56,9 @@ type EmployeeFormProps = {
 }
 
 const initialState: ActionState = {}
+
+const selectClassName =
+  "h-7 w-full rounded-md border border-input bg-input/20 px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
 
 function CheckboxField({
   id,
@@ -88,6 +99,12 @@ function buildFormData(values: EmployeeFormValues) {
   formData.append("mobilePhone", values.mobilePhone)
   formData.append("email", values.email)
 
+  if (values.areaName.trim()) {
+    formData.append("areaName", values.areaName.trim())
+  } else if (values.areaId) {
+    formData.append("areaId", values.areaId)
+  }
+
   if (values.active) formData.append("active", "on")
   if (values.canSendWhatsapp) formData.append("canSendWhatsapp", "on")
   if (values.canSendEmail) formData.append("canSendEmail", "on")
@@ -97,12 +114,18 @@ function buildFormData(values: EmployeeFormValues) {
 
 export function EmployeeForm({
   action,
+  areas,
   defaultValues,
   unsubscribeInfo,
   submitLabel,
   cancelHref,
 }: EmployeeFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState)
+  const [createNewArea, setCreateNewArea] = useState(
+    () =>
+      areas.length === 0 ||
+      (!defaultValues?.areaId && Boolean(defaultValues?.areaName))
+  )
 
   const form = useForm<EmployeeFormValues>({
     defaultValues: {
@@ -111,6 +134,8 @@ export function EmployeeForm({
       nationalId: defaultValues?.nationalId ?? "",
       mobilePhone: normalizePhoneForInput(defaultValues?.mobilePhone),
       email: defaultValues?.email ?? "",
+      areaId: defaultValues?.areaId ?? "",
+      areaName: defaultValues?.areaName ?? "",
       active: defaultValues?.active ?? true,
       canSendWhatsapp: defaultValues?.canSendWhatsapp ?? true,
       canSendEmail: defaultValues?.canSendEmail ?? true,
@@ -179,6 +204,58 @@ export function EmployeeForm({
                 type="email"
                 {...form.register("email", { required: true })}
               />
+            </div>
+
+            <div className="space-y-3 rounded-md border p-4">
+              <div className="space-y-2">
+                <Label htmlFor="areaId">Área</Label>
+                {!createNewArea ? (
+                  <select
+                    id="areaId"
+                    className={selectClassName}
+                    disabled={pending}
+                    value={form.watch("areaId")}
+                    onChange={(event) => {
+                      form.setValue("areaId", event.target.value)
+                      form.setValue("areaName", "")
+                    }}
+                    required
+                  >
+                    <option value="">Selecciona un área</option>
+                    {areas.map((area) => (
+                      <option key={area.id} value={String(area.id)}>
+                        {area.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    id="areaName"
+                    placeholder="Ej: Operaciones"
+                    disabled={pending}
+                    {...form.register("areaName", { required: createNewArea })}
+                  />
+                )}
+                {areas.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    onClick={() => {
+                      const next = !createNewArea
+                      setCreateNewArea(next)
+                      if (next) {
+                        form.setValue("areaId", "")
+                      } else {
+                        form.setValue("areaName", "")
+                      }
+                    }}
+                  >
+                    {createNewArea
+                      ? "Elegir un área existente"
+                      : "Crear una área nueva"}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3 rounded-md border p-4">
