@@ -99,8 +99,9 @@ export function EmployeeBulkImportForm({
                 nombres, apellidos, cedula, telefono, correo, area
               </p>
               <p className="mt-2">
-                Opcionales: whatsapp, correo_notif (si/no). Los empleados se
-                crean activos por defecto.
+                Opcionales: telefono, whatsapp, correo_notif (si/no). Sin
+                teléfono se registra igual, pero WhatsApp queda deshabilitado.
+                Los empleados se crean activos por defecto.
               </p>
             </div>
           </CardContent>

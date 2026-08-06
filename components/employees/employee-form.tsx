@@ -190,10 +190,9 @@ export function EmployeeForm({
               <PhoneInputForm<EmployeeFormValues>
                 control={form.control}
                 name="mobilePhone"
-                label="Teléfono celular"
+                label="Teléfono celular (opcional)"
                 placeholder="300 123 4567"
                 disabled={pending}
-                rules={{ required: "El teléfono es obligatorio." }}
               />
             </div>
 

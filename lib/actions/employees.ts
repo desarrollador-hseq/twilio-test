@@ -38,14 +38,8 @@ function parseEmployeeForm(formData: FormData) {
 }
 
 function validateEmployeeInput(input: ReturnType<typeof parseEmployeeForm>) {
-  if (
-    !input.firstName ||
-    !input.lastName ||
-    !input.nationalId ||
-    !input.mobilePhone ||
-    !input.email
-  ) {
-    return "Todos los campos del empleado son obligatorios."
+  if (!input.firstName || !input.lastName || !input.nationalId || !input.email) {
+    return "Nombres, apellidos, cédula y correo son obligatorios."
   }
 
   if (!input.areaId && !input.areaName) {
@@ -60,8 +54,12 @@ function validateEmployeeInput(input: ReturnType<typeof parseEmployeeForm>) {
     return "Ingresa un correo válido."
   }
 
-  if (!isValidE164Phone(input.mobilePhone)) {
+  if (input.mobilePhone && !isValidE164Phone(input.mobilePhone)) {
     return "Ingresa un teléfono válido con código de país, ej: +573001234567."
+  }
+
+  if (input.canSendWhatsapp && !input.mobilePhone) {
+    return "Para permitir WhatsApp debes ingresar un teléfono celular."
   }
 
   return null
@@ -140,6 +138,8 @@ export async function createEmployee(
     return { error: areaResult.error }
   }
 
+  const canSendWhatsapp = Boolean(input.mobilePhone) && input.canSendWhatsapp
+
   try {
     await prisma.employee.create({
       data: {
@@ -151,7 +151,7 @@ export async function createEmployee(
         mobilePhone: input.mobilePhone,
         email: input.email,
         active: input.active,
-        canSendWhatsapp: input.canSendWhatsapp,
+        canSendWhatsapp,
         canSendEmail: input.canSendEmail,
       },
     })
@@ -188,10 +188,12 @@ export async function updateEmployee(
     return { error: areaResult.error }
   }
 
+  const canSendWhatsapp = Boolean(input.mobilePhone) && input.canSendWhatsapp
+
   const unsubscribeData =
-    !input.canSendWhatsapp && employee.canSendWhatsapp
+    !canSendWhatsapp && employee.canSendWhatsapp
       ? { unsubscribedAt: new Date(), unsubscribeReason: "admin" }
-      : input.canSendWhatsapp && !employee.canSendWhatsapp
+      : canSendWhatsapp && !employee.canSendWhatsapp
         ? { unsubscribedAt: null, unsubscribeReason: null }
         : {}
 
@@ -205,7 +207,7 @@ export async function updateEmployee(
         mobilePhone: input.mobilePhone,
         email: input.email,
         active: input.active,
-        canSendWhatsapp: input.canSendWhatsapp,
+        canSendWhatsapp,
         canSendEmail: input.canSendEmail,
         areaId: areaResult.areaId,
         ...unsubscribeData,

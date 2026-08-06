@@ -19,39 +19,45 @@ export type ExcelRowError = {
   message: string
 }
 
-const HEADER_ALIASES: Record<string, keyof Omit<ExcelEmployeeRow, "rowNumber">> =
-  {
-    nombres: "firstName",
-    nombre: "firstName",
-    firstname: "firstName",
-    first_name: "firstName",
-    apellidos: "lastName",
-    apellido: "lastName",
-    lastname: "lastName",
-    last_name: "lastName",
-    cedula: "nationalId",
-    cédula: "nationalId",
-    documento: "nationalId",
-    nationalid: "nationalId",
-    national_id: "nationalId",
-    telefono: "mobilePhone",
-    teléfono: "mobilePhone",
-    celular: "mobilePhone",
-    mobilephone: "mobilePhone",
-    mobile_phone: "mobilePhone",
-    phone: "mobilePhone",
-    correo: "email",
-    email: "email",
-    mail: "email",
-    area: "areaName",
-    área: "areaName",
-    areaname: "areaName",
-    whatsapp: "canSendWhatsapp",
-    cansendwhatsapp: "canSendWhatsapp",
-    correo_notif: "canSendEmail",
-    email_notif: "canSendEmail",
-    cansendemail: "canSendEmail",
-  }
+const HEADER_ALIASES: Record<string, string> = {
+  nombres: "firstName",
+  nombre: "firstName",
+  primer_nombre: "firstName",
+  firstname: "firstName",
+  first_name: "firstName",
+  apellidos: "lastName",
+  apellido: "lastName",
+  lastname: "lastName",
+  last_name: "lastName",
+  nombre_completo: "fullName",
+  cedula: "nationalId",
+  documento: "nationalId",
+  n_identificacion: "nationalId",
+  no_identificacion: "nationalId",
+  numero_identificacion: "nationalId",
+  nationalid: "nationalId",
+  national_id: "nationalId",
+  telefono: "mobilePhone",
+  celular: "mobilePhone",
+  mobilephone: "mobilePhone",
+  mobile_phone: "mobilePhone",
+  phone: "mobilePhone",
+  numero_activo_de_whastapp: "mobilePhone",
+  numero_activo_de_whatsapp: "mobilePhone",
+  whatsapp_number: "mobilePhone",
+  correo: "email",
+  correo_electronico: "email",
+  email: "email",
+  mail: "email",
+  area: "areaName",
+  areaname: "areaName",
+  area_a_la_que_pertenece: "areaName",
+  whatsapp: "canSendWhatsapp",
+  cansendwhatsapp: "canSendWhatsapp",
+  correo_notif: "canSendEmail",
+  email_notif: "canSendEmail",
+  cansendemail: "canSendEmail",
+}
 
 function normalizeHeader(value: unknown) {
   return String(value ?? "")
@@ -59,7 +65,9 @@ function normalizeHeader(value: unknown) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
+    .replace(/[°º]/g, "")
+    .replace(/[^\w]+/g, "_")
+    .replace(/^_+|_+$/g, "")
 }
 
 function cellToString(value: unknown) {
@@ -85,6 +93,63 @@ function parseBoolean(value: unknown, defaultValue: boolean) {
     return false
   }
   return defaultValue
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLocaleLowerCase("es-CO")
+      return lower.charAt(0).toLocaleUpperCase("es-CO") + lower.slice(1)
+    })
+    .join(" ")
+}
+
+function deriveLastName(fullName: string, firstName: string) {
+  const fullParts = fullName.trim().split(/\s+/).filter(Boolean)
+  const firstToken = firstName.trim().split(/\s+/)[0]?.toLowerCase()
+
+  if (fullParts.length <= 1) {
+    return titleCaseWords(fullParts[0] ?? firstName) || "Sin apellido"
+  }
+
+  if (firstToken && fullParts[0]?.toLowerCase() === firstToken) {
+    return titleCaseWords(fullParts.slice(1).join(" "))
+  }
+
+  return titleCaseWords(fullParts.slice(1).join(" "))
+}
+
+function parsePhoneCell(raw: string) {
+  const value = raw.trim()
+  if (!value) {
+    return { mobilePhone: "", hasPhone: false as const }
+  }
+
+  const normalizedText = value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+
+  if (
+    normalizedText.includes("no tiene") ||
+    normalizedText === "n/a" ||
+    normalizedText === "na" ||
+    normalizedText === "-" ||
+    normalizedText === "sin numero" ||
+    normalizedText === "ninguno"
+  ) {
+    return { mobilePhone: "", hasPhone: false as const }
+  }
+
+  const mobilePhone = normalizePhoneToE164(value)
+  if (!isValidE164Phone(mobilePhone)) {
+    return { mobilePhone: "", hasPhone: false as const, invalid: true as const }
+  }
+
+  return { mobilePhone, hasPhone: true as const }
 }
 
 export function parseEmployeesExcel(buffer: Buffer): {
@@ -113,14 +178,15 @@ export function parseEmployeesExcel(buffer: Buffer): {
       errors: [
         {
           rowNumber: 0,
-          message: "El archivo debe incluir una fila de encabezados y al menos un empleado.",
+          message:
+            "El archivo debe incluir una fila de encabezados y al menos un empleado.",
         },
       ],
     }
   }
 
   const headers = (matrix[0] ?? []).map(normalizeHeader)
-  const columnMap = new Map<number, keyof Omit<ExcelEmployeeRow, "rowNumber">>()
+  const columnMap = new Map<number, string>()
 
   headers.forEach((header, index) => {
     const field = HEADER_ALIASES[header]
@@ -129,26 +195,22 @@ export function parseEmployeesExcel(buffer: Buffer): {
     }
   })
 
-  const requiredFields = [
-    "firstName",
-    "lastName",
-    "nationalId",
-    "mobilePhone",
-    "email",
-    "areaName",
-  ] as const
+  const mappedFields = new Set(columnMap.values())
+  const hasIdentity =
+    mappedFields.has("nationalId") &&
+    mappedFields.has("email") &&
+    mappedFields.has("areaName") &&
+    (mappedFields.has("firstName") || mappedFields.has("fullName")) &&
+    (mappedFields.has("lastName") || mappedFields.has("fullName"))
 
-  const missingHeaders = requiredFields.filter(
-    (field) => ![...columnMap.values()].includes(field)
-  )
-
-  if (missingHeaders.length > 0) {
+  if (!hasIdentity) {
     return {
       rows: [],
       errors: [
         {
           rowNumber: 1,
-          message: `Faltan columnas obligatorias: ${missingHeaders.join(", ")}. Usa: nombres, apellidos, cedula, telefono, correo, area.`,
+          message:
+            "Faltan columnas obligatorias. Usa: nombres, apellidos, cedula, correo, area (telefono opcional). También se acepta nombre completo + primer nombre.",
         },
       ],
     }
@@ -164,8 +226,7 @@ export function parseEmployeesExcel(buffer: Buffer): {
     const isEmpty = rawRow.every((cell) => cellToString(cell) === "")
     if (isEmpty) continue
 
-    const values: Partial<ExcelEmployeeRow> = {
-      rowNumber,
+    const values: Record<string, string | boolean> = {
       canSendWhatsapp: true,
       canSendEmail: true,
     }
@@ -179,17 +240,37 @@ export function parseEmployeesExcel(buffer: Buffer): {
       }
     }
 
-    const firstName = values.firstName?.trim() ?? ""
-    const lastName = values.lastName?.trim() ?? ""
-    const nationalId = values.nationalId?.trim() ?? ""
-    const email = values.email?.trim() ?? ""
-    const areaName = values.areaName?.trim() ?? ""
-    const mobilePhone = normalizePhoneToE164(values.mobilePhone?.trim() ?? "")
+    const fullName = String(values.fullName ?? "").trim()
+    let firstName = String(values.firstName ?? "").trim()
+    let lastName = String(values.lastName ?? "").trim()
+    const nationalId = String(values.nationalId ?? "").trim()
+    const email = String(values.email ?? "").trim()
+    const areaName = String(values.areaName ?? "").trim()
+    const rawPhone = String(values.mobilePhone ?? "").trim()
 
-    if (!firstName || !lastName || !nationalId || !mobilePhone || !email || !areaName) {
+    if (fullName) {
+      if (!firstName) {
+        firstName = titleCaseWords(fullName.split(/\s+/)[0] ?? "")
+      } else {
+        firstName = titleCaseWords(firstName)
+      }
+      if (!lastName) {
+        lastName = deriveLastName(fullName, firstName)
+      } else {
+        lastName = titleCaseWords(lastName)
+      }
+    } else {
+      firstName = titleCaseWords(firstName)
+      lastName = titleCaseWords(lastName)
+    }
+
+    const phoneResult = parsePhoneCell(rawPhone)
+
+    if (!firstName || !lastName || !nationalId || !email || !areaName) {
       errors.push({
         rowNumber,
-        message: "Faltan campos obligatorios (nombres, apellidos, cédula, teléfono, correo o área).",
+        message:
+          "Faltan campos obligatorios (nombres/apellidos, cédula, correo o área).",
       })
       continue
     }
@@ -199,10 +280,11 @@ export function parseEmployeesExcel(buffer: Buffer): {
       continue
     }
 
-    if (!isValidE164Phone(mobilePhone)) {
+    if (phoneResult.invalid) {
       errors.push({
         rowNumber,
-        message: "Teléfono inválido. Usa formato con indicativo, ej: +573001234567 o 3001234567.",
+        message:
+          "Teléfono inválido. Déjalo vacío o usa formato con indicativo, ej: 3001234567.",
       })
       continue
     }
@@ -216,16 +298,20 @@ export function parseEmployeesExcel(buffer: Buffer): {
     }
     seenNationalIds.add(nationalId)
 
+    const canSendWhatsapp = phoneResult.hasPhone
+      ? Boolean(values.canSendWhatsapp ?? true)
+      : false
+
     rows.push({
       rowNumber,
       firstName,
       lastName,
       nationalId,
-      mobilePhone,
+      mobilePhone: phoneResult.mobilePhone,
       email,
       areaName,
-      canSendWhatsapp: values.canSendWhatsapp ?? true,
-      canSendEmail: values.canSendEmail ?? true,
+      canSendWhatsapp,
+      canSendEmail: Boolean(values.canSendEmail ?? true),
     })
   }
 
@@ -242,4 +328,3 @@ export const EMPLOYEE_EXCEL_TEMPLATE_HEADERS = [
   "whatsapp",
   "correo_notif",
 ] as const
-

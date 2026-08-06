@@ -193,6 +193,7 @@ export async function launchCampaign(campaignId: number) {
       active: true,
       deletedAt: null,
       canSendWhatsapp: true,
+      NOT: { mobilePhone: "" },
     },
   })
 
@@ -293,6 +294,7 @@ export async function sendIndividualMessage(
       deletedAt: null,
       active: true,
       canSendWhatsapp: true,
+      NOT: { mobilePhone: "" },
     },
   })
 
