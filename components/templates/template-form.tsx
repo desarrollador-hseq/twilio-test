@@ -1,9 +1,20 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useMemo, useState } from "react"
 
 import type { ActionState } from "@/lib/actions/types"
 import { DEFAULT_MEDIA_BASE_URL } from "@/lib/messaging/content-variables"
+import {
+  detectPresetFromSchema,
+  PRESET_VARIABLE_SCHEMAS,
+  presetLabel,
+  schemaFromPreset,
+  schemaHasMediaVariable,
+  serializeVariableSchema,
+  TEMPLATE_VARIABLE_PRESETS,
+  type TemplateVariablePreset,
+} from "@/lib/messaging/template-variable-schema"
+import { ImportTwilioSchemaButton } from "@/components/templates/import-twilio-schema-button"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,6 +37,7 @@ type TemplateFormValues = {
   status?: string
   mediaBaseUrl?: string | null
   mediaFileName?: string | null
+  variableSchema?: string | null
   companyId?: number | null
 }
 
@@ -54,6 +66,24 @@ export function TemplateForm({
 }: TemplateFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState)
 
+  const initialPreset = defaultValues?.variableSchema
+    ? detectPresetFromSchema(defaultValues.variableSchema)
+    : "image_greeting"
+
+  const [variablePreset, setVariablePreset] =
+    useState<TemplateVariablePreset>(initialPreset)
+  const [customSchemaJson, setCustomSchemaJson] = useState(
+    initialPreset === "custom" && defaultValues?.variableSchema
+      ? defaultValues.variableSchema
+      : serializeVariableSchema(PRESET_VARIABLE_SCHEMAS.image_greeting)
+  )
+
+  const activeSchema = useMemo(() => {
+    return schemaFromPreset(variablePreset, customSchemaJson).schema
+  }, [variablePreset, customSchemaJson])
+
+  const showMediaFields = schemaHasMediaVariable(activeSchema)
+
   return (
     <Card className="max-w-2xl">
       <form action={formAction}>
@@ -76,6 +106,28 @@ export function TemplateForm({
               required
               placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             />
+            <ImportTwilioSchemaButton
+              onImported={(data) => {
+                setVariablePreset(data.preset)
+                setCustomSchemaJson(data.variableSchemaJson)
+
+                if (data.friendlyName) {
+                  const nameInput =
+                    document.querySelector<HTMLInputElement>("#friendlyName")
+                  if (nameInput && !nameInput.value.trim()) {
+                    nameInput.value = data.friendlyName
+                  }
+                }
+
+                if (data.language) {
+                  const languageInput =
+                    document.querySelector<HTMLInputElement>("#language")
+                  if (languageInput && !languageInput.value.trim()) {
+                    languageInput.value = data.language
+                  }
+                }
+              }}
+            />
           </div>
 
           <div className="space-y-2">
@@ -88,6 +140,48 @@ export function TemplateForm({
               placeholder="Ej. Recordatorio HSEQ"
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="variablePreset">Tipo de variables</Label>
+            <select
+              id="variablePreset"
+              name="variablePreset"
+              className={selectClassName}
+              value={variablePreset}
+              onChange={(e) =>
+                setVariablePreset(e.target.value as TemplateVariablePreset)
+              }
+            >
+              {TEMPLATE_VARIABLE_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {presetLabel(preset)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Debe coincidir con los placeholders {"{{1}}"}, {"{{2}}"}, etc. de
+              la plantilla aprobada en Twilio.
+            </p>
+          </div>
+
+          {variablePreset === "custom" && (
+            <div className="space-y-2">
+              <Label htmlFor="variableSchemaJson">Esquema (JSON)</Label>
+              <textarea
+                id="variableSchemaJson"
+                name="variableSchemaJson"
+                className="min-h-40 w-full rounded-md border border-input bg-input/20 px-2 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                value={customSchemaJson}
+                onChange={(e) => setCustomSchemaJson(e.target.value)}
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Array de objetos con <code>key</code>, <code>label</code>,{" "}
+                <code>kind</code> (<code>static</code>, <code>employee</code>,{" "}
+                <code>media</code>).
+              </p>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -137,43 +231,41 @@ export function TemplateForm({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="mediaBaseUrl">Prefijo de URL de imagen</Label>
-            <Input
-              id="mediaBaseUrl"
-              name="mediaBaseUrl"
-              defaultValue={
-                defaultValues?.mediaBaseUrl ?? DEFAULT_MEDIA_BASE_URL
-              }
-              placeholder={DEFAULT_MEDIA_BASE_URL}
-            />
-            <p className="text-xs text-muted-foreground">
-              Parte fija de la Media URL en Twilio, antes de {"{{2}}"}. Por
-              defecto usa el CDN de Grupo HSEQ. Ejemplo completo:{" "}
-              <code>
-                {DEFAULT_MEDIA_BASE_URL}
-                {"{{2}}"}
-              </code>
-            </p>
-          </div>
+          {showMediaFields && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="mediaBaseUrl">Prefijo de URL de imagen</Label>
+                <Input
+                  id="mediaBaseUrl"
+                  name="mediaBaseUrl"
+                  defaultValue={
+                    defaultValues?.mediaBaseUrl ?? DEFAULT_MEDIA_BASE_URL
+                  }
+                  placeholder={DEFAULT_MEDIA_BASE_URL}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Parte fija de la Media URL en Twilio, antes del path en la
+                  variable de tipo media. Por defecto usa el CDN de Grupo HSEQ.
+                </p>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="mediaFileName">
-              Archivo de imagen por defecto (variable {"{{2}}"})
-            </Label>
-            <Input
-              id="mediaFileName"
-              name="mediaFileName"
-              defaultValue={defaultValues?.mediaFileName ?? ""}
-              placeholder="jor-ambiental-ghseq.png"
-            />
-            <p className="text-xs text-muted-foreground">
-              Solo el nombre del archivo (ej. <code>jor-ambiental-ghseq.png</code>),
-              no la URL completa. Twilio ya concatena el prefijo con {"{{2}}"}.
-              El nombre del empleado ({"{{1}}"}) se completa automáticamente al
-              enviar.
-            </p>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="mediaFileName">
+                  Archivo multimedia por defecto
+                </Label>
+                <Input
+                  id="mediaFileName"
+                  name="mediaFileName"
+                  defaultValue={defaultValues?.mediaFileName ?? ""}
+                  placeholder="jor-ambiental-ghseq.png"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Solo el nombre del archivo si Twilio concatena prefijo + path.
+                  Puede sobreescribirse al crear una campaña.
+                </p>
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="companyId">Empresa (opcional)</Label>

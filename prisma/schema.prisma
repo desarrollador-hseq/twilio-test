@@ -76,6 +76,7 @@ model Template {
   status         String     @default("approved")
   mediaBaseUrl   String?
   mediaFileName  String?
+  variableSchema String?
   companyId      Int?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt

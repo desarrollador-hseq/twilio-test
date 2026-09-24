@@ -5,6 +5,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
     employeeId?: number
     templateId?: number
+    contentVariables?: Record<string, string>
   }
 
   if (!body.employeeId || !body.templateId) {
@@ -14,7 +15,20 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const result = await sendIndividualMessage(body.employeeId, body.templateId)
+  const staticOverrides: Record<string, string> = {}
+  if (body.contentVariables && typeof body.contentVariables === "object") {
+    for (const [key, value] of Object.entries(body.contentVariables)) {
+      if (typeof value === "string") {
+        staticOverrides[key] = value
+      }
+    }
+  }
+
+  const result = await sendIndividualMessage(
+    body.employeeId,
+    body.templateId,
+    staticOverrides
+  )
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 400 })

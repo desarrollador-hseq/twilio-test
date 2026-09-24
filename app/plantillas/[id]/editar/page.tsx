@@ -47,6 +47,7 @@ export default async function EditarPlantillaPage({
           status: template.status,
           mediaBaseUrl: template.mediaBaseUrl,
           mediaFileName: template.mediaFileName,
+          variableSchema: template.variableSchema,
           companyId: template.companyId,
         }}
         submitLabel="Guardar cambios"

@@ -1,4 +1,6 @@
 import { getSpacesCdnUrl } from "@/lib/env"
+import type { TemplateVariableDef } from "@/lib/messaging/template-variable-schema"
+import { resolveTemplateVariableSchema } from "@/lib/messaging/template-variable-schema"
 
 export const DEFAULT_MEDIA_BASE_URL = `${getSpacesCdnUrl().replace(/\/$/, "")}/ccomercial/`
 
@@ -123,10 +125,10 @@ export function resolveMediaSource(
   return { fileName: null, source: null }
 }
 
-type BuildContentVariablesOptions = {
+export type BuildContentVariablesContext = {
+  campaignStaticVars?: Record<string, string> | null
   mediaFileName?: string | null
   mediaBaseUrl?: string | null
-  useFullName?: boolean
 }
 
 export function resolveMediaFileName(
@@ -140,31 +142,96 @@ export function resolveMediaFileName(
   )
 }
 
-export function buildContentVariablesForEmployee(
+function employeeNameForDef(
   employee: EmployeeNameSource,
-  options: BuildContentVariablesOptions = {}
-) {
-  const variables: Record<string, string> = {}
-
-  const employeeName = options.useFullName
+  def: TemplateVariableDef
+): string {
+  const useFullName = def.source === "fullName"
+  return useFullName
     ? [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim()
     : employee.firstName.trim()
+}
 
-  if (employeeName) {
-    variables["1"] = employeeName
+export function validateBuiltContentVariables(
+  schema: TemplateVariableDef[],
+  variables: Record<string, string>
+): string | null {
+  for (const def of schema) {
+    if (!def.required) {
+      continue
+    }
+    const value = variables[def.key]?.trim()
+    if (!value) {
+      return `Falta la variable requerida {{${def.key}}} (${def.label}).`
+    }
   }
+  return null
+}
 
-  const mediaValue = options.mediaFileName?.trim()
-  if (mediaValue) {
-    const twilioMediaPath = normalizeMediaFileName(
-      mediaValue,
-      options.mediaBaseUrl
-    )
-    if (twilioMediaPath) {
-      // La plantilla de Twilio ya concatena mediaBaseUrl + {{2}}.
-      variables["2"] = twilioMediaPath
+export function buildContentVariables(
+  schema: TemplateVariableDef[],
+  employee: EmployeeNameSource,
+  context: BuildContentVariablesContext = {}
+): Record<string, string> | undefined {
+  const variables: Record<string, string> = {}
+  const staticVars = context.campaignStaticVars ?? {}
+
+  for (const def of schema) {
+    if (def.kind === "static") {
+      const value = staticVars[def.key]?.trim()
+      if (value) {
+        variables[def.key] = value
+      }
+      continue
+    }
+
+    if (def.kind === "employee") {
+      const name = employeeNameForDef(employee, def)
+      if (name) {
+        variables[def.key] = name
+      }
+      continue
+    }
+
+    if (def.kind === "media") {
+      const mediaValue = context.mediaFileName?.trim()
+      if (mediaValue) {
+        const twilioMediaPath = normalizeMediaFileName(
+          mediaValue,
+          context.mediaBaseUrl
+        )
+        if (twilioMediaPath) {
+          // La plantilla de Twilio ya concatena mediaBaseUrl + {{n}}.
+          variables[def.key] = twilioMediaPath
+        }
+      }
     }
   }
 
   return Object.keys(variables).length > 0 ? variables : undefined
+}
+
+export type BuildContentVariablesResult = {
+  variables?: Record<string, string>
+  error: string | null
+}
+
+export function buildContentVariablesForTemplate(
+  variableSchema: string | null | undefined,
+  employee: EmployeeNameSource,
+  context: BuildContentVariablesContext = {}
+): BuildContentVariablesResult {
+  const schema = resolveTemplateVariableSchema(variableSchema)
+  const variables = buildContentVariables(schema, employee, context)
+  if (!variables) {
+    return {
+      error: "No hay variables de contenido para enviar.",
+      variables: undefined,
+    }
+  }
+  const validationError = validateBuiltContentVariables(schema, variables)
+  if (validationError) {
+    return { error: validationError, variables: undefined }
+  }
+  return { variables, error: null }
 }

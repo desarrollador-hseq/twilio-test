@@ -27,6 +27,7 @@ export default async function NuevaCampanaPage() {
           companyId: t.companyId,
           mediaFileName: t.mediaFileName,
           mediaBaseUrl: t.mediaBaseUrl,
+          variableSchema: t.variableSchema,
         }))}
         submitLabel="Crear campaña"
         cancelHref="/campanas"

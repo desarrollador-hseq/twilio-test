@@ -1,10 +1,16 @@
 "use client"
 
-import { useActionState, useEffect, useMemo, useState } from "react"
+import { useActionState, useMemo, useState } from "react"
 
 import type { ActionState } from "@/lib/actions/types"
 import { CampaignMediaImage } from "@/components/campaigns/campaign-media-image"
 import { resolveMediaSource } from "@/lib/messaging/content-variables"
+import {
+  resolveTemplateVariableSchema,
+  schemaHasMediaVariable,
+  schemaStaticVariables,
+  variableKindLabel,
+} from "@/lib/messaging/template-variable-schema"
 import { validateCampaignMediaFile } from "@/lib/storage/media-validation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +31,7 @@ type TemplateOption = {
   companyId: number | null
   mediaFileName?: string | null
   mediaBaseUrl?: string | null
+  variableSchema?: string | null
 }
 
 type CampaignFormProps = {
@@ -81,29 +88,32 @@ export function CampaignForm({
     )
   }, [availableTemplates, selectedTemplateId])
 
+  const templateSchema = useMemo(
+    () => resolveTemplateVariableSchema(selectedTemplate?.variableSchema),
+    [selectedTemplate?.variableSchema]
+  )
+
+  const staticVariables = useMemo(
+    () => schemaStaticVariables(templateSchema),
+    [templateSchema]
+  )
+
+  const usesMedia = schemaHasMediaVariable(templateSchema)
+
   const templatePreview = resolveMediaSource(
     null,
     selectedTemplate?.mediaFileName,
     selectedTemplate?.mediaBaseUrl
   )
 
-  useEffect(() => {
-    if (!selectedFile) {
-      setLocalPreviewUrl(null)
-      return
-    }
-
-    const objectUrl = URL.createObjectURL(selectedFile)
-    setLocalPreviewUrl(objectUrl)
-
-    return () => {
-      URL.revokeObjectURL(objectUrl)
-    }
-  }, [selectedFile])
-
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
     setFileError(null)
+
+    if (localPreviewUrl) {
+      URL.revokeObjectURL(localPreviewUrl)
+      setLocalPreviewUrl(null)
+    }
 
     if (!file) {
       setSelectedFile(null)
@@ -119,6 +129,7 @@ export function CampaignForm({
     }
 
     setSelectedFile(file)
+    setLocalPreviewUrl(URL.createObjectURL(file))
   }
 
   return (
@@ -207,61 +218,114 @@ export function CampaignForm({
             </select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="mediaFile">
-              Archivo multimedia (opcional)
-            </Label>
-            <Input
-              id="mediaFile"
-              name="mediaFile"
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
-              onChange={handleFileChange}
-            />
-            {fileError && (
-              <p className="text-sm text-destructive">{fileError}</p>
-            )}
-            {localPreviewUrl && selectedFile && (
-              <CampaignMediaImage
-                mediaFileName={localPreviewUrl}
-                source="campaign"
-                mediaKind={
-                  selectedFile.type.startsWith("video/") ? "video" : "image"
-                }
-                size="lg"
-                showMeta
+          {selectedTemplate && (
+            <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
+              <p className="text-sm font-medium">Variables de la plantilla</p>
+              <ul className="space-y-2 text-sm">
+                {templateSchema.map((def) => (
+                  <li key={def.key} className="flex flex-col gap-0.5">
+                    <span>
+                      <code>{`{{${def.key}}}`}</code> — {def.label}{" "}
+                      <span className="text-xs text-muted-foreground">
+                        ({variableKindLabel(def.kind)})
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {staticVariables.map((def) => (
+            <div key={def.key} className="space-y-2">
+              <Label htmlFor={`contentVar_${def.key}`}>
+                {def.label} ({`{{${def.key}}}`})
+              </Label>
+              {def.input === "textarea" ? (
+                <textarea
+                  id={`contentVar_${def.key}`}
+                  name={`contentVar_${def.key}`}
+                  required={def.required}
+                  className="min-h-24 w-full rounded-md border border-input bg-input/20 px-2 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                />
+              ) : (
+                <Input
+                  id={`contentVar_${def.key}`}
+                  name={`contentVar_${def.key}`}
+                  type={def.input === "url" ? "url" : "text"}
+                  required={def.required}
+                  placeholder={
+                    def.input === "url"
+                      ? "https://..."
+                      : `Valor para {{${def.key}}}`
+                  }
+                />
+              )}
+            </div>
+          ))}
+
+          {usesMedia && (
+            <div className="space-y-2">
+              <Label htmlFor="mediaFile">
+                Archivo multimedia (opcional)
+              </Label>
+              <Input
+                id="mediaFile"
+                name="mediaFile"
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
+                onChange={handleFileChange}
               />
-            )}
-            {!localPreviewUrl && templatePreview.fileName && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  Vista previa de la plantilla (se usa si no subes archivo):
-                </p>
+              {fileError && (
+                <p className="text-sm text-destructive">{fileError}</p>
+              )}
+              {localPreviewUrl && selectedFile && (
                 <CampaignMediaImage
-                  mediaFileName={templatePreview.fileName}
-                  mediaBaseUrl={selectedTemplate?.mediaBaseUrl}
-                  source={templatePreview.source}
+                  mediaFileName={localPreviewUrl}
+                  source="campaign"
+                  mediaKind={
+                    selectedFile.type.startsWith("video/") ? "video" : "image"
+                  }
                   size="lg"
                   showMeta
                 />
-              </div>
+              )}
+              {!localPreviewUrl && templatePreview.fileName && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Vista previa de la plantilla (se usa si no subes archivo):
+                  </p>
+                  <CampaignMediaImage
+                    mediaFileName={templatePreview.fileName}
+                    mediaBaseUrl={selectedTemplate?.mediaBaseUrl}
+                    source={templatePreview.source}
+                    size="lg"
+                    showMeta
+                  />
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Imagen (JPG, PNG, GIF, WEBP hasta 5 MB) o video (MP4, WEBM, MOV
+                hasta 16 MB). Se sube a DigitalOcean Spaces. Si no subes
+                archivo, se usa el de la plantilla
+                {selectedTemplate?.mediaFileName ? (
+                  <>
+                    : <code>{selectedTemplate.mediaFileName}</code>
+                  </>
+                ) : (
+                  "."
+                )}
+              </p>
+            </div>
+          )}
+
+          {selectedTemplate &&
+            templateSchema.some((def) => def.kind === "employee") && (
+              <p className="text-xs text-muted-foreground">
+                Las variables de empleado se completan automáticamente al enviar
+                (nombre de cada destinatario).
+              </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Imagen (JPG, PNG, GIF, WEBP hasta 5 MB) o video (MP4, WEBM, MOV
-              hasta 16 MB). Se sube a DigitalOcean Spaces y la URL queda
-              guardada en la campaña. Si no subes archivo, se usa el de la
-              plantilla
-              {selectedTemplate?.mediaFileName ? (
-                <>
-                  : <code>{selectedTemplate.mediaFileName}</code>
-                </>
-              ) : (
-                "."
-              )}{" "}
-              El nombre del empleado ({"{{1}}"}) se toma automáticamente al
-              enviar.
-            </p>
-          </div>
         </CardContent>
         <CardFooter className="gap-2 border-t">
           <Button type="submit" disabled={pending || Boolean(fileError)}>

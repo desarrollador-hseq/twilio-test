@@ -9,9 +9,16 @@ import { sendWhatsAppMessage } from "@/lib/messaging/send-whatsapp"
 import { formatTwilioError } from "@/lib/twilio-errors"
 import { CAMPAIGN_CHANNELS } from "@/lib/messaging/constants"
 import {
-  buildContentVariablesForEmployee,
+  buildContentVariablesForTemplate,
   resolveMediaFileName,
 } from "@/lib/messaging/content-variables"
+import {
+  parseCampaignStaticVariables,
+  parseStoredContentVariables,
+  resolveTemplateVariableSchema,
+  schemaHasMediaVariable,
+  validateStaticVariables,
+} from "@/lib/messaging/template-variable-schema"
 import { syncMissingTwilioMessageErrors } from "@/lib/messaging/sync-message-errors"
 import { uploadCampaignMedia } from "@/lib/storage/spaces"
 
@@ -115,10 +122,28 @@ export async function createCampaign(
     return { error: "La plantilla no es compatible con WhatsApp." }
   }
 
+  const schema = resolveTemplateVariableSchema(template.variableSchema)
+  const { values: staticVars, error: staticVarsError } =
+    parseCampaignStaticVariables(formData, schema)
+  if (staticVarsError) {
+    return { error: staticVarsError }
+  }
+
+  const contentVariables =
+    Object.keys(staticVars).length > 0
+      ? JSON.stringify(staticVars)
+      : null
+
   const mediaFile = formData.get("mediaFile")
   let mediaFileName: string | null = null
+  const templateUsesMedia = schemaHasMediaVariable(schema)
 
   if (mediaFile instanceof File && mediaFile.size > 0) {
+    if (!templateUsesMedia) {
+      return {
+        error: "La plantilla seleccionada no usa archivo multimedia.",
+      }
+    }
     if (!isSpacesConfigured()) {
       return {
         error:
@@ -149,7 +174,7 @@ export async function createCampaign(
         templateId: input.templateId,
         channel: input.channel,
         mediaFileName,
-        contentVariables: input.contentVariables,
+        contentVariables,
         status: "draft",
       },
     })
@@ -181,11 +206,18 @@ export async function launchCampaign(campaignId: number) {
     return { error: "Por ahora solo se soporta el canal WhatsApp." }
   }
 
-  const mediaFileName = resolveMediaFileName(
-    campaign.mediaFileName,
-    campaign.template.mediaFileName,
-    campaign.template.mediaBaseUrl
+  const schema = resolveTemplateVariableSchema(campaign.template.variableSchema)
+  const campaignStaticVars = parseStoredContentVariables(
+    campaign.contentVariables
   )
+
+  const mediaFileName = schemaHasMediaVariable(schema)
+    ? resolveMediaFileName(
+        campaign.mediaFileName,
+        campaign.template.mediaFileName,
+        campaign.template.mediaBaseUrl
+      )
+    : null
 
   const employees = await prisma.employee.findMany({
     where: {
@@ -211,10 +243,29 @@ export async function launchCampaign(campaignId: number) {
   let failureCount = 0
 
   for (const employee of employees) {
-    const contentVariables = buildContentVariablesForEmployee(employee, {
-      mediaFileName,
-      mediaBaseUrl: campaign.template.mediaBaseUrl,
-    })
+    const built = buildContentVariablesForTemplate(
+      campaign.template.variableSchema,
+      employee,
+      {
+        campaignStaticVars,
+        mediaFileName,
+        mediaBaseUrl: campaign.template.mediaBaseUrl,
+      }
+    )
+
+    if (built.error || !built.variables) {
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: "failed" },
+      })
+      return {
+        error:
+          built.error ??
+          "No se pudieron construir las variables de contenido.",
+      }
+    }
+
+    const contentVariables = built.variables
 
     const message = await prisma.message.create({
       data: {
@@ -281,7 +332,8 @@ export async function launchCampaign(campaignId: number) {
 
 export async function sendIndividualMessage(
   employeeId: number,
-  templateId: number
+  templateId: number,
+  staticOverrides: Record<string, string> = {}
 ) {
   if (!isTwilioConfigured()) {
     return { error: "Twilio no está configurado. Revisa las variables de entorno." }
@@ -313,16 +365,41 @@ export async function sendIndividualMessage(
     return { error: "Plantilla no encontrada o no aprobada." }
   }
 
-  const mediaFileName = resolveMediaFileName(
-    null,
-    template.mediaFileName,
-    template.mediaBaseUrl
+  const schema = resolveTemplateVariableSchema(template.variableSchema)
+  const { values: staticVars, error: staticError } = validateStaticVariables(
+    schema,
+    staticOverrides
+  )
+  if (staticError) {
+    return { error: staticError }
+  }
+
+  const mediaFileName = schemaHasMediaVariable(schema)
+    ? resolveMediaFileName(
+        null,
+        template.mediaFileName,
+        template.mediaBaseUrl
+      )
+    : null
+
+  const built = buildContentVariablesForTemplate(
+    template.variableSchema,
+    employee,
+    {
+      campaignStaticVars: staticVars,
+      mediaFileName,
+      mediaBaseUrl: template.mediaBaseUrl,
+    }
   )
 
-  const contentVariables = buildContentVariablesForEmployee(employee, {
-    mediaFileName,
-    mediaBaseUrl: template.mediaBaseUrl,
-  })
+  if (built.error || !built.variables) {
+    return {
+      error:
+        built.error ?? "No se pudieron construir las variables de contenido.",
+    }
+  }
+
+  const contentVariables = built.variables
 
   const message = await prisma.message.create({
     data: {
