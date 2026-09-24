@@ -76,6 +76,16 @@ export default async function CampanaDetallePage({
               <p>{campaign.channel}</p>
             </div>
             <div>
+              <p className="text-xs text-muted-foreground">Áreas</p>
+              <p>
+                {campaign.targetAllAreas
+                  ? "Todas las áreas"
+                  : campaign.areas.length > 0
+                    ? campaign.areas.map((item) => item.area.name).join(", ")
+                    : "Sin áreas"}
+              </p>
+            </div>
+            <div>
               <p className="text-xs text-muted-foreground">Plantilla</p>
               <p className="font-mono text-xs">{campaign.template.contentSid}</p>
             </div>
@@ -106,7 +116,12 @@ export default async function CampanaDetallePage({
               <CardTitle>Lanzar campaña</CardTitle>
               <CardDescription>
                 {twilioReady
-                  ? "Se enviará a empleados activos con permiso de WhatsApp."
+                  ? campaign.targetAllAreas
+                    ? "Se enviará a empleados activos con permiso de WhatsApp de todas las áreas."
+                    : `Se enviará a empleados activos con permiso de WhatsApp de: ${
+                        campaign.areas.map((item) => item.area.name).join(", ") ||
+                        "áreas seleccionadas"
+                      }.`
                   : "Configura TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_WHATSAPP_FROM"}
               </CardDescription>
             </CardHeader>

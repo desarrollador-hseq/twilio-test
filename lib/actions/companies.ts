@@ -36,6 +36,22 @@ export async function getCompany(id: number) {
       employees: {
         where: { deletedAt: null },
         orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        include: {
+          area: true,
+        },
+      },
+      areas: {
+        where: { deletedAt: null },
+        orderBy: { name: "asc" },
+        include: {
+          _count: {
+            select: {
+              employees: {
+                where: { deletedAt: null },
+              },
+            },
+          },
+        },
       },
     },
   })
@@ -124,6 +140,10 @@ export async function deleteCompany(companyId: number) {
       data: { deletedAt: now },
     }),
     prisma.employee.updateMany({
+      where: { companyId, deletedAt: null },
+      data: { deletedAt: now },
+    }),
+    prisma.area.updateMany({
       where: { companyId, deletedAt: null },
       data: { deletedAt: now },
     }),

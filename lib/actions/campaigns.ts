@@ -25,12 +25,19 @@ import { uploadCampaignMedia } from "@/lib/storage/spaces"
 function parseCampaignForm(formData: FormData) {
   const companyId = Number(formData.get("companyId"))
   const templateId = Number(formData.get("templateId"))
+  const areaScope = formData.get("areaScope")?.toString().trim() || "all"
+  const areaIds = formData
+    .getAll("areaIds")
+    .map((value) => Number(value.toString()))
+    .filter((value) => !Number.isNaN(value))
 
   return {
     name: formData.get("name")?.toString().trim() ?? "",
     companyId,
     templateId,
     channel: formData.get("channel")?.toString().trim() || "whatsapp",
+    targetAllAreas: areaScope !== "selected",
+    areaIds,
     contentVariables: null,
   }
 }
@@ -50,6 +57,10 @@ function validateCampaignInput(input: ReturnType<typeof parseCampaignForm>) {
     )
   ) {
     return "Canal inválido."
+  }
+
+  if (!input.targetAllAreas && input.areaIds.length === 0) {
+    return "Selecciona al menos un área o elige todas las áreas."
   }
 
   return null
@@ -73,6 +84,11 @@ export async function getCampaign(id: number) {
     include: {
       company: true,
       template: true,
+      areas: {
+        include: {
+          area: true,
+        },
+      },
       messages: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -134,6 +150,31 @@ export async function createCampaign(
       ? JSON.stringify(staticVars)
       : null
 
+  let selectedAreaIds: number[] = []
+
+  if (!input.targetAllAreas) {
+    const areas = await prisma.area.findMany({
+      where: {
+        id: { in: input.areaIds },
+        companyId: input.companyId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+
+    selectedAreaIds = areas.map((area) => area.id)
+
+    if (selectedAreaIds.length === 0) {
+      return { error: "Las áreas seleccionadas no existen en esta empresa." }
+    }
+
+    if (selectedAreaIds.length !== input.areaIds.length) {
+      return {
+        error: "Una o más áreas seleccionadas no pertenecen a la empresa.",
+      }
+    }
+  }
+
   const mediaFile = formData.get("mediaFile")
   let mediaFileName: string | null = null
   const templateUsesMedia = schemaHasMediaVariable(schema)
@@ -173,9 +214,15 @@ export async function createCampaign(
         companyId: input.companyId,
         templateId: input.templateId,
         channel: input.channel,
+        targetAllAreas: input.targetAllAreas,
         mediaFileName,
         contentVariables,
         status: "draft",
+        areas: input.targetAllAreas
+          ? undefined
+          : {
+              create: selectedAreaIds.map((areaId) => ({ areaId })),
+            },
       },
     })
     campaignId = campaign.id
@@ -219,18 +266,28 @@ export async function launchCampaign(campaignId: number) {
       )
     : null
 
+  const selectedAreaIds = campaign.areas.map((item) => item.areaId)
+
   const employees = await prisma.employee.findMany({
     where: {
       companyId: campaign.companyId,
       active: true,
       deletedAt: null,
       canSendWhatsapp: true,
+      NOT: { mobilePhone: "" },
+      ...(campaign.targetAllAreas
+        ? {}
+        : {
+            areaId: { in: selectedAreaIds },
+          }),
     },
   })
 
   if (employees.length === 0) {
     return {
-      error: "No hay empleados elegibles para WhatsApp en esta empresa.",
+      error: campaign.targetAllAreas
+        ? "No hay empleados elegibles para WhatsApp en esta empresa."
+        : "No hay empleados elegibles para WhatsApp en las áreas seleccionadas.",
     }
   }
 
@@ -345,6 +402,7 @@ export async function sendIndividualMessage(
       deletedAt: null,
       active: true,
       canSendWhatsapp: true,
+      NOT: { mobilePhone: "" },
     },
   })
 

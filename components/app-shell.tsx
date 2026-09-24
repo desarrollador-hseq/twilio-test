@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Building2, FileText, Megaphone } from "lucide-react"
+import { Building2, FileText, LayoutDashboard, Megaphone } from "lucide-react"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { Button } from "@/components/ui/button"
@@ -28,6 +28,12 @@ export async function AppShell({
             Twilio HSEQ
           </Link>
           <Separator orientation="vertical" className="h-5" />
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/">
+              <LayoutDashboard data-icon="inline-start" />
+              Dashboard
+            </Link>
+          </Button>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/empresas">
               <Building2 data-icon="inline-start" />

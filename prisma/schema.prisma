@@ -35,15 +35,34 @@ model Company {
   updatedAt DateTime   @updatedAt
   deletedAt DateTime?
   employees Employee[]
+  areas     Area[]
   templates Template[]
   campaigns Campaign[]
 
   @@index([deletedAt])
 }
 
+model Area {
+  id             Int            @id @default(autoincrement())
+  companyId      Int
+  name           String
+  nameNormalized String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+  company        Company        @relation(fields: [companyId], references: [id])
+  employees      Employee[]
+  campaigns      CampaignArea[]
+
+  @@unique([companyId, nameNormalized])
+  @@index([companyId])
+  @@index([deletedAt])
+}
+
 model Employee {
   id               Int       @id @default(autoincrement())
   companyId        Int
+  areaId           Int?
   firstName        String
   lastName         String
   nationalId       String
@@ -58,10 +77,12 @@ model Employee {
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
   company          Company   @relation(fields: [companyId], references: [id])
+  area             Area?     @relation(fields: [areaId], references: [id])
   messages         Message[]
 
   @@unique([companyId, nationalId])
   @@index([companyId])
+  @@index([areaId])
   @@index([deletedAt])
   @@index([active])
 }
@@ -91,26 +112,38 @@ model Template {
 }
 
 model Campaign {
-  id               Int       @id @default(autoincrement())
+  id               Int            @id @default(autoincrement())
   name             String
   companyId        Int
   templateId       Int
-  channel          String    @default("whatsapp")
-  status           String    @default("draft")
+  channel          String         @default("whatsapp")
+  status           String         @default("draft")
+  targetAllAreas   Boolean        @default(true)
   mediaFileName    String?
   contentVariables String?
   scheduledAt      DateTime?
   sentAt           DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-  company     Company   @relation(fields: [companyId], references: [id])
-  template    Template  @relation(fields: [templateId], references: [id])
-  messages    Message[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+  company          Company        @relation(fields: [companyId], references: [id])
+  template         Template       @relation(fields: [templateId], references: [id])
+  messages         Message[]
+  areas            CampaignArea[]
 
   @@index([companyId])
   @@index([deletedAt])
   @@index([status])
+}
+
+model CampaignArea {
+  campaignId Int
+  areaId     Int
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  area       Area     @relation(fields: [areaId], references: [id])
+
+  @@id([campaignId, areaId])
+  @@index([areaId])
 }
 
 model Message {

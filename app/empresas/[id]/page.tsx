@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic"
 
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { Pencil, Plus } from "lucide-react"
+import { Pencil, Plus, Upload } from "lucide-react"
 
 import { getCompany } from "@/lib/actions/companies"
 import { unsubscribeReasonLabel } from "@/lib/labels"
@@ -63,6 +63,12 @@ export default async function EmpresaDetallePage({
               Nuevo empleado
             </Link>
           </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/empresas/${company.id}/empleados/carga-masiva`}>
+              <Upload data-icon="inline-start" />
+              Carga masiva
+            </Link>
+          </Button>
           <DeleteCompanyButton companyId={company.id} />
         </div>
       }
@@ -82,11 +88,18 @@ export default async function EmpresaDetallePage({
               <p className="text-sm text-muted-foreground">
                 Agrega el primer empleado de esta empresa.
               </p>
-              <Button asChild>
-                <Link href={`/empresas/${company.id}/empleados/nuevo`}>
-                  Registrar empleado
-                </Link>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild>
+                  <Link href={`/empresas/${company.id}/empleados/nuevo`}>
+                    Registrar empleado
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href={`/empresas/${company.id}/empleados/carga-masiva`}>
+                    Carga masiva Excel
+                  </Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <Table>
@@ -94,6 +107,7 @@ export default async function EmpresaDetallePage({
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Cédula</TableHead>
+                  <TableHead>Área</TableHead>
                   <TableHead>Contacto</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Notificaciones</TableHead>
@@ -107,6 +121,11 @@ export default async function EmpresaDetallePage({
                       {employee.firstName} {employee.lastName}
                     </TableCell>
                     <TableCell>{employee.nationalId}</TableCell>
+                    <TableCell>
+                      {employee.area?.name ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <p>{employee.mobilePhone}</p>

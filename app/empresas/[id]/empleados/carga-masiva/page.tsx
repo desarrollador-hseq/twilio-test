@@ -2,13 +2,12 @@ export const dynamic = "force-dynamic"
 
 import { notFound } from "next/navigation"
 
-import { getCompanyAreas } from "@/lib/actions/areas"
 import { getCompany } from "@/lib/actions/companies"
-import { createEmployee } from "@/lib/actions/employees"
+import { importEmployeesFromExcel } from "@/lib/actions/employees"
 import { AppShell } from "@/components/app-shell"
-import { EmployeeForm } from "@/components/employees/employee-form"
+import { EmployeeBulkImportForm } from "@/components/employees/employee-bulk-import-form"
 
-export default async function NuevoEmpleadoPage({
+export default async function CargaMasivaEmpleadosPage({
   params,
 }: {
   params: Promise<{ id: string }>
@@ -26,18 +25,15 @@ export default async function NuevoEmpleadoPage({
     notFound()
   }
 
-  const areas = await getCompanyAreas(companyId)
-  const createAction = createEmployee.bind(null, companyId)
+  const importAction = importEmployeesFromExcel.bind(null, companyId)
 
   return (
     <AppShell
-      title="Nuevo empleado"
+      title="Carga masiva de empleados"
       description={`Empresa: ${company.legalName}`}
     >
-      <EmployeeForm
-        action={createAction}
-        areas={areas.map((area) => ({ id: area.id, name: area.name }))}
-        submitLabel="Registrar empleado"
+      <EmployeeBulkImportForm
+        action={importAction}
         cancelHref={`/empresas/${company.id}`}
       />
     </AppShell>

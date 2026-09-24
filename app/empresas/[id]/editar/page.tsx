@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 
 import { getCompany, updateCompany } from "@/lib/actions/companies"
 import { AppShell } from "@/components/app-shell"
+import { CompanyAreasPanel } from "@/components/companies/company-areas-panel"
 import { CompanyForm } from "@/components/companies/company-form"
 
 export default async function EditarEmpresaPage({
@@ -31,15 +32,25 @@ export default async function EditarEmpresaPage({
       title="Editar empresa"
       description={company.legalName}
     >
-      <CompanyForm
-        action={updateAction}
-        defaultValues={{
-          legalName: company.legalName,
-          taxId: company.taxId,
-        }}
-        submitLabel="Guardar cambios"
-        cancelHref={`/empresas/${company.id}`}
-      />
+      <div className="space-y-6">
+        <CompanyForm
+          action={updateAction}
+          defaultValues={{
+            legalName: company.legalName,
+            taxId: company.taxId,
+          }}
+          submitLabel="Guardar cambios"
+          cancelHref={`/empresas/${company.id}`}
+        />
+        <CompanyAreasPanel
+          companyId={company.id}
+          areas={company.areas.map((area) => ({
+            id: area.id,
+            name: area.name,
+            employeeCount: area._count.employees,
+          }))}
+        />
+      </div>
     </AppShell>
   )
 }
