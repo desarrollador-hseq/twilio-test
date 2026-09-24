@@ -35,8 +35,8 @@ export type TemplateVariableDef = {
   /** Solo kind media: nombre de archivo por defecto (path relativo al prefijo) */
   mediaFileName?: string | null
   /**
-   * fullUrl: URL HTTPS pública (recomendado; evita 63019 si el archivo no está bajo el prefijo de Twilio).
-   * path: solo path relativo; la plantilla en Twilio debe concatenar mediaBaseUrl + {{n}}.
+   * path: solo nombre/path (Twilio concatena prefijo + {{n}}; p. ej. …/ws/{{3}}).
+   * fullUrl: URL HTTPS completa en {{n}} (solo si la plantilla Twilio no tiene prefijo fijo).
    */
   mediaTwilioFormat?: MediaTwilioFormat
 }

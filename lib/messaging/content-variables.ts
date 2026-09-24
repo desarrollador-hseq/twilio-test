@@ -153,6 +153,36 @@ export function resolveMediaFileName(
   )
 }
 
+/**
+ * Valor para {{n}} cuando Twilio concatena prefijo + variable (p. ej. …/ws/{{3}}).
+ * Nunca devuelve una URL absoluta.
+ */
+export function toTwilioMediaPath(
+  stored?: string | null,
+  mediaBaseUrl?: string | null
+): string | null {
+  const value = stored?.trim()
+  if (!value) {
+    return null
+  }
+
+  if (isAbsoluteMediaUrl(value)) {
+    const relative = normalizeMediaFileName(value, mediaBaseUrl)
+    if (relative && !isAbsoluteMediaUrl(relative)) {
+      return relative.split("/").pop() ?? relative
+    }
+    try {
+      const segments = new URL(value).pathname.split("/").filter(Boolean)
+      return segments.at(-1) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  const relative = normalizeMediaFileName(value, mediaBaseUrl) ?? value
+  return relative.split("/").pop() ?? relative
+}
+
 /** Valor de media listo para contentVariables de Twilio. */
 export function resolveTwilioMediaValue(
   def: Pick<
@@ -165,31 +195,28 @@ export function resolveTwilioMediaValue(
     def.mediaBaseUrl ??
     context.templateMediaBaseUrl ??
     DEFAULT_MEDIA_BASE_URL
-  const format = def.mediaTwilioFormat ?? "fullUrl"
+  const format = def.mediaTwilioFormat ?? "path"
   const campaignMedia = context.campaignMediaFileName?.trim()
-
-  const resolvedFileName = resolveMediaFileName(
-    context.campaignMediaFileName,
-    def.mediaFileName ?? context.templateMediaFileName,
-    mediaBaseUrl
-  )
+  const templateMedia = (
+    def.mediaFileName ?? context.templateMediaFileName
+  )?.trim()
 
   if (format === "fullUrl") {
     if (campaignMedia && isAbsoluteMediaUrl(campaignMedia)) {
       return campaignMedia
     }
+    const resolvedFileName = resolveMediaFileName(
+      context.campaignMediaFileName,
+      def.mediaFileName ?? context.templateMediaFileName,
+      mediaBaseUrl
+    )
     return buildMediaUrl(resolvedFileName, mediaBaseUrl)
   }
 
-  if (!resolvedFileName) {
-    return null
-  }
-
-  const twilioMediaPath = normalizeMediaFileName(
-    resolvedFileName,
-    mediaBaseUrl
+  return (
+    toTwilioMediaPath(campaignMedia, mediaBaseUrl) ??
+    toTwilioMediaPath(templateMedia, mediaBaseUrl)
   )
-  return twilioMediaPath
 }
 
 export function recipientFromEmployeeRecord(employee: {

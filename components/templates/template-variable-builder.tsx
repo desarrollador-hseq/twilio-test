@@ -86,7 +86,7 @@ export function TemplateVariableBuilder({
       nextDef.mediaBaseUrl =
         current.mediaBaseUrl?.trim() || DEFAULT_MEDIA_BASE_URL
       nextDef.mediaFileName = current.mediaFileName ?? ""
-      nextDef.mediaTwilioFormat = current.mediaTwilioFormat ?? "fullUrl"
+      nextDef.mediaTwilioFormat = current.mediaTwilioFormat ?? "path"
     }
     updateRow(index, nextDef)
   }
@@ -211,7 +211,7 @@ export function TemplateVariableBuilder({
                       <Label className="text-xs">Envío a Twilio</Label>
                       <select
                         className={selectClassName}
-                        value={def.mediaTwilioFormat ?? "fullUrl"}
+                        value={def.mediaTwilioFormat ?? "path"}
                         onChange={(e) =>
                           updateRow(index, {
                             mediaTwilioFormat:
@@ -219,11 +219,11 @@ export function TemplateVariableBuilder({
                           })
                         }
                       >
-                        <option value="fullUrl">
-                          URL completa (recomendado)
-                        </option>
                         <option value="path">
-                          Solo path (Twilio concatena el prefijo)
+                          Solo nombre de archivo (Twilio concatena prefijo)
+                        </option>
+                        <option value="fullUrl">
+                          URL completa (sin prefijo en Twilio)
                         </option>
                       </select>
                       <p className="text-xs text-muted-foreground">

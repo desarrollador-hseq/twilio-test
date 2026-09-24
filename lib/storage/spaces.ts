@@ -64,6 +64,6 @@ export async function uploadCampaignMedia(file: File): Promise<string> {
 
   await getSpacesClient().send(new PutObjectCommand(input))
 
-  const cdnBase = config.cdnUrl.replace(/\/$/, "")
-  return `${cdnBase}/${key}`
+  const fileName = key.split("/").pop() ?? safeName
+  return fileName
 }
