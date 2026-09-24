@@ -44,7 +44,7 @@ Guía para registrar plantillas de Twilio Content y usarlas en campañas sin cam
 - [ ] Placeholders en Twilio coinciden con `key` del esquema (`"1"`, `"2"`, …).
 - [ ] Tipo de variables correcto o JSON personalizado validado.
 - [ ] Prueba con **Enviar prueba** antes de una campaña grande.
-- [ ] Para media: URL en Twilio = prefijo en plantilla + path en `{{n}}`.
+- [ ] Para media: por defecto la app envía **URL HTTPS completa** en `{{n}}` (formato `fullUrl`). Usa solo path si en Twilio la Media URL es prefijo + variable y el archivo vive bajo ese prefijo.
 
 ## Referencia de `kind`
 

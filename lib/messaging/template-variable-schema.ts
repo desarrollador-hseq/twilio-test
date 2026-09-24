@@ -20,6 +20,9 @@ export type EmployeeNameSourceField = "firstName" | "fullName"
 
 export type CompanySourceField = "legalName"
 
+/** Cómo se envía {{n}} a Twilio para variables media. */
+export type MediaTwilioFormat = "path" | "fullUrl"
+
 export type TemplateVariableDef = {
   key: string
   label: string
@@ -31,6 +34,11 @@ export type TemplateVariableDef = {
   mediaBaseUrl?: string | null
   /** Solo kind media: nombre de archivo por defecto (path relativo al prefijo) */
   mediaFileName?: string | null
+  /**
+   * fullUrl: URL HTTPS pública (recomendado; evita 63019 si el archivo no está bajo el prefijo de Twilio).
+   * path: solo path relativo; la plantilla en Twilio debe concatenar mediaBaseUrl + {{n}}.
+   */
+  mediaTwilioFormat?: MediaTwilioFormat
 }
 
 export const PRESET_VARIABLE_SCHEMAS: Record<
@@ -50,6 +58,7 @@ export const PRESET_VARIABLE_SCHEMAS: Record<
       label: "Imagen o video",
       kind: "media",
       required: false,
+      mediaTwilioFormat: "path",
     },
   ],
   course_link: [
@@ -160,11 +169,15 @@ function parseVariableDef(raw: unknown): TemplateVariableDef | null {
   if (kind === "media") {
     const mediaBaseUrl = raw.mediaBaseUrl
     const mediaFileName = raw.mediaFileName
+    const mediaTwilioFormat = raw.mediaTwilioFormat
     if (typeof mediaBaseUrl === "string" && mediaBaseUrl.trim()) {
       def.mediaBaseUrl = mediaBaseUrl.trim()
     }
     if (typeof mediaFileName === "string" && mediaFileName.trim()) {
       def.mediaFileName = mediaFileName.trim()
+    }
+    if (mediaTwilioFormat === "path" || mediaTwilioFormat === "fullUrl") {
+      def.mediaTwilioFormat = mediaTwilioFormat
     }
   }
 

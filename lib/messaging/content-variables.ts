@@ -153,6 +153,45 @@ export function resolveMediaFileName(
   )
 }
 
+/** Valor de media listo para contentVariables de Twilio. */
+export function resolveTwilioMediaValue(
+  def: Pick<
+    TemplateVariableDef,
+    "mediaBaseUrl" | "mediaFileName" | "mediaTwilioFormat"
+  >,
+  context: BuildContentVariablesContext
+): string | null {
+  const mediaBaseUrl =
+    def.mediaBaseUrl ??
+    context.templateMediaBaseUrl ??
+    DEFAULT_MEDIA_BASE_URL
+  const format = def.mediaTwilioFormat ?? "fullUrl"
+  const campaignMedia = context.campaignMediaFileName?.trim()
+
+  const resolvedFileName = resolveMediaFileName(
+    context.campaignMediaFileName,
+    def.mediaFileName ?? context.templateMediaFileName,
+    mediaBaseUrl
+  )
+
+  if (format === "fullUrl") {
+    if (campaignMedia && isAbsoluteMediaUrl(campaignMedia)) {
+      return campaignMedia
+    }
+    return buildMediaUrl(resolvedFileName, mediaBaseUrl)
+  }
+
+  if (!resolvedFileName) {
+    return null
+  }
+
+  const twilioMediaPath = normalizeMediaFileName(
+    resolvedFileName,
+    mediaBaseUrl
+  )
+  return twilioMediaPath
+}
+
 export function recipientFromEmployeeRecord(employee: {
   firstName: string
   lastName: string
@@ -243,24 +282,9 @@ export function buildContentVariables(
     }
 
     if (def.kind === "media") {
-      const mediaBaseUrl =
-        def.mediaBaseUrl ??
-        context.templateMediaBaseUrl ??
-        DEFAULT_MEDIA_BASE_URL
-      const resolvedFileName = resolveMediaFileName(
-        context.campaignMediaFileName,
-        def.mediaFileName ?? context.templateMediaFileName,
-        mediaBaseUrl
-      )
-      if (resolvedFileName) {
-        const twilioMediaPath = normalizeMediaFileName(
-          resolvedFileName,
-          mediaBaseUrl
-        )
-        if (twilioMediaPath) {
-          // La plantilla de Twilio ya concatena mediaBaseUrl + {{n}}.
-          variables[def.key] = twilioMediaPath
-        }
+      const twilioValue = resolveTwilioMediaValue(def, context)
+      if (twilioValue) {
+        variables[def.key] = twilioValue
       }
     }
   }

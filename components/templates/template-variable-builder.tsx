@@ -86,6 +86,7 @@ export function TemplateVariableBuilder({
       nextDef.mediaBaseUrl =
         current.mediaBaseUrl?.trim() || DEFAULT_MEDIA_BASE_URL
       nextDef.mediaFileName = current.mediaFileName ?? ""
+      nextDef.mediaTwilioFormat = current.mediaTwilioFormat ?? "fullUrl"
     }
     updateRow(index, nextDef)
   }
@@ -206,6 +207,31 @@ export function TemplateVariableBuilder({
                 </p>
                 {def.kind === "media" && (
                   <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
+                    <div className="space-y-1 sm:col-span-2">
+                      <Label className="text-xs">Envío a Twilio</Label>
+                      <select
+                        className={selectClassName}
+                        value={def.mediaTwilioFormat ?? "fullUrl"}
+                        onChange={(e) =>
+                          updateRow(index, {
+                            mediaTwilioFormat:
+                              e.target.value === "path" ? "path" : "fullUrl",
+                          })
+                        }
+                      >
+                        <option value="fullUrl">
+                          URL completa (recomendado)
+                        </option>
+                        <option value="path">
+                          Solo path (Twilio concatena el prefijo)
+                        </option>
+                      </select>
+                      <p className="text-xs text-muted-foreground">
+                        Usa URL completa si Twilio no tiene prefijo fijo en la
+                        plantilla; con prefijo + path, el archivo debe estar bajo
+                        esa carpeta (p. ej. ws/).
+                      </p>
+                    </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Prefijo CDN (Twilio + path)</Label>
                       <Input

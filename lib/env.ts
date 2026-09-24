@@ -70,7 +70,7 @@ export function getSpacesCdnUrl() {
 
 export function getSpacesPrefix() {
   const prefix =
-    process.env.DO_SPACES_PREFIX?.trim() || "ws/campaigns"
+    process.env.DO_SPACES_PREFIX?.trim() || "ws"
   return prefix.replace(/^\/+|\/+$/g, "")
 }
 
