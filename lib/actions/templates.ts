@@ -7,16 +7,13 @@ import { prisma } from "@/lib/prisma"
 import type { ActionState } from "@/lib/actions/types"
 import { TEMPLATE_STATUSES, TEMPLATE_TYPES } from "@/lib/messaging/constants"
 import {
-  normalizeMediaBaseUrl,
-  normalizeMediaFileName,
-} from "@/lib/messaging/content-variables"
-import {
-  schemaFromPreset,
-  schemaHasMediaVariable,
+  legacyTemplateMediaFromSchema,
+  parseAndValidateVariableSchemaJson,
+  parseVariableSchemaJson,
   serializeVariableSchema,
-  TEMPLATE_VARIABLE_PRESETS,
-  type TemplateVariablePreset,
+  type TemplateVariableDef,
 } from "@/lib/messaging/template-variable-schema"
+import { normalizeMediaBaseUrl, normalizeMediaFileName } from "@/lib/messaging/content-variables"
 import {
   fetchTwilioContentTemplate,
   suggestTemplateSchemaFromTwilioContent,
@@ -35,29 +32,11 @@ function parseTemplateForm(formData: FormData) {
   const companyId =
     companyIdRaw && companyIdRaw !== "none" ? Number(companyIdRaw) : null
 
-  const mediaBaseUrl = (() => {
-    const raw = formData.get("mediaBaseUrl")?.toString().trim()
-    return raw ? normalizeMediaBaseUrl(raw) : null
-  })()
-
-  const mediaFileNameRaw =
-    formData.get("mediaFileName")?.toString().trim() || null
-
-  const variablePresetRaw =
-    formData.get("variablePreset")?.toString().trim() || "image_greeting"
-  const variablePreset = TEMPLATE_VARIABLE_PRESETS.includes(
-    variablePresetRaw as TemplateVariablePreset
-  )
-    ? (variablePresetRaw as TemplateVariablePreset)
-    : "image_greeting"
-
-  const customVariableSchemaJson =
+  const variableSchemaJson =
     formData.get("variableSchemaJson")?.toString() ?? ""
 
-  const { schema, error: schemaError } = schemaFromPreset(
-    variablePreset,
-    customVariableSchemaJson
-  )
+  const { schema, error: schemaError } =
+    parseAndValidateVariableSchemaJson(variableSchemaJson)
 
   return {
     contentSid: formData.get("contentSid")?.toString().trim() ?? "",
@@ -66,14 +45,9 @@ function parseTemplateForm(formData: FormData) {
     category: formData.get("category")?.toString().trim() || null,
     type: formData.get("type")?.toString().trim() || "whatsapp",
     status: formData.get("status")?.toString().trim() || "approved",
-    mediaBaseUrl,
-    mediaFileName: mediaFileNameRaw
-      ? normalizeMediaFileName(mediaFileNameRaw, mediaBaseUrl)
-      : null,
     variableSchema: schemaError
       ? null
       : serializeVariableSchema(schema),
-    variablePreset,
     schemaError,
     companyId: companyId && !Number.isNaN(companyId) ? companyId : null,
   }
@@ -107,12 +81,30 @@ function validateTemplateInput(input: ReturnType<typeof parseTemplateForm>) {
   return null
 }
 
+function normalizeSchemaMediaFields(schema: TemplateVariableDef[]) {
+  return schema.map((def) => {
+    if (def.kind !== "media") {
+      return def
+    }
+    const mediaBaseUrl = def.mediaBaseUrl?.trim()
+      ? normalizeMediaBaseUrl(def.mediaBaseUrl)
+      : null
+    const mediaFileName = def.mediaFileName?.trim()
+      ? normalizeMediaFileName(def.mediaFileName, mediaBaseUrl)
+      : null
+    return {
+      ...def,
+      mediaBaseUrl,
+      mediaFileName,
+    }
+  })
+}
+
 function templateDataFromForm(input: ReturnType<typeof parseTemplateForm>) {
-  const schema = schemaFromPreset(
-    input.variablePreset,
-    input.variablePreset === "custom" ? input.variableSchema : null
-  ).schema
-  const hasMedia = schemaHasMediaVariable(schema)
+  const parsed = parseVariableSchemaJson(input.variableSchema ?? "")
+  const schema = normalizeSchemaMediaFields(parsed ?? [])
+  const variableSchema = serializeVariableSchema(schema)
+  const legacyMedia = legacyTemplateMediaFromSchema(schema)
 
   return {
     contentSid: input.contentSid,
@@ -121,9 +113,16 @@ function templateDataFromForm(input: ReturnType<typeof parseTemplateForm>) {
     category: input.category,
     type: input.type,
     status: input.status,
-    variableSchema: input.variableSchema,
-    mediaBaseUrl: hasMedia ? input.mediaBaseUrl : null,
-    mediaFileName: hasMedia ? input.mediaFileName : null,
+    variableSchema,
+    mediaBaseUrl: legacyMedia.mediaBaseUrl
+      ? normalizeMediaBaseUrl(legacyMedia.mediaBaseUrl)
+      : null,
+    mediaFileName: legacyMedia.mediaFileName
+      ? normalizeMediaFileName(
+          legacyMedia.mediaFileName,
+          legacyMedia.mediaBaseUrl
+        )
+      : null,
     companyId: input.companyId,
   }
 }
@@ -227,7 +226,6 @@ export async function updateTemplate(
 
 export type ImportTwilioSchemaResult = {
   error?: string
-  preset?: TemplateVariablePreset
   variableSchemaJson?: string
   friendlyName?: string
   language?: string
@@ -252,7 +250,6 @@ export async function importTemplateSchemaFromTwilio(
     const content = await fetchTwilioContentTemplate(sid)
     const suggestion = suggestTemplateSchemaFromTwilioContent(content)
     return {
-      preset: suggestion.preset,
       variableSchemaJson: suggestion.variableSchemaJson,
       friendlyName: suggestion.friendlyName,
       language: suggestion.language,

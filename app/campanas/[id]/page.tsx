@@ -4,7 +4,13 @@ import { notFound } from "next/navigation"
 
 import { getCampaign } from "@/lib/actions/campaigns"
 import { CampaignMediaImage } from "@/components/campaigns/campaign-media-image"
+import { CampaignMessagePreviewCard } from "@/components/campaigns/campaign-message-preview"
+import { buildCampaignMessagePreview } from "@/lib/messaging/campaign-message-preview"
 import { resolveMediaSource } from "@/lib/messaging/content-variables"
+import {
+  enrichSchemaWithLegacyTemplateMedia,
+  resolveTemplateVariableSchema,
+} from "@/lib/messaging/template-variable-schema"
 import { isTwilioConfigured } from "@/lib/env"
 import {
   campaignStatusLabel,
@@ -48,11 +54,31 @@ export default async function CampanaDetallePage({
   }
 
   const twilioReady = isTwilioConfigured()
+  const enrichedSchema = enrichSchemaWithLegacyTemplateMedia(
+    resolveTemplateVariableSchema(campaign.template.variableSchema),
+    campaign.template.mediaBaseUrl,
+    campaign.template.mediaFileName
+  )
+  const primaryMediaDef = enrichedSchema.find((def) => def.kind === "media")
   const media = resolveMediaSource(
     campaign.mediaFileName,
-    campaign.template.mediaFileName,
-    campaign.template.mediaBaseUrl
+    primaryMediaDef?.mediaFileName ?? campaign.template.mediaFileName,
+    primaryMediaDef?.mediaBaseUrl ?? campaign.template.mediaBaseUrl
   )
+
+  const messagePreview = await buildCampaignMessagePreview({
+    companyId: campaign.companyId,
+    targetAllAreas: campaign.targetAllAreas,
+    areaIds: campaign.areas.map((item) => item.areaId),
+    template: {
+      contentSid: campaign.template.contentSid,
+      variableSchema: campaign.template.variableSchema,
+      mediaBaseUrl: campaign.template.mediaBaseUrl,
+      mediaFileName: campaign.template.mediaFileName,
+    },
+    contentVariables: campaign.contentVariables,
+    mediaFileName: campaign.mediaFileName,
+  })
 
   return (
     <AppShell
@@ -93,7 +119,10 @@ export default async function CampanaDetallePage({
               <p className="mb-2 text-xs text-muted-foreground">Multimedia</p>
               <CampaignMediaImage
                 mediaFileName={media.fileName}
-                mediaBaseUrl={campaign.template.mediaBaseUrl}
+                mediaBaseUrl={
+                  primaryMediaDef?.mediaBaseUrl ??
+                  campaign.template.mediaBaseUrl
+                }
                 source={media.source}
                 size="md"
                 showMeta
@@ -107,6 +136,19 @@ export default async function CampanaDetallePage({
                   : "—"}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Vista previa del mensaje</CardTitle>
+            <CardDescription>
+              Aproximación de cómo vería el mensaje un destinatario en WhatsApp
+              (con un empleado de ejemplo del alcance de la campaña).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CampaignMessagePreviewCard preview={messagePreview} />
           </CardContent>
         </Card>
 

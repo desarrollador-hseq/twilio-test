@@ -3,18 +3,14 @@
 import { useActionState, useMemo, useState } from "react"
 
 import type { ActionState } from "@/lib/actions/types"
-import { DEFAULT_MEDIA_BASE_URL } from "@/lib/messaging/content-variables"
 import {
-  detectPresetFromSchema,
+  parseVariableSchemaJson,
   PRESET_VARIABLE_SCHEMAS,
-  presetLabel,
-  schemaFromPreset,
-  schemaHasMediaVariable,
   serializeVariableSchema,
-  TEMPLATE_VARIABLE_PRESETS,
-  type TemplateVariablePreset,
+  type TemplateVariableDef,
 } from "@/lib/messaging/template-variable-schema"
 import { ImportTwilioSchemaButton } from "@/components/templates/import-twilio-schema-button"
+import { TemplateVariableBuilder } from "@/components/templates/template-variable-builder"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,6 +53,16 @@ const initialState: ActionState = {}
 const selectClassName =
   "h-7 w-full rounded-md border border-input bg-input/20 px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
 
+function initialSchemaRows(
+  variableSchema: string | null | undefined
+): TemplateVariableDef[] {
+  const parsed = parseVariableSchemaJson(variableSchema ?? "")
+  if (parsed && parsed.length > 0) {
+    return parsed
+  }
+  return [...PRESET_VARIABLE_SCHEMAS.image_greeting]
+}
+
 export function TemplateForm({
   action,
   companies,
@@ -66,23 +72,28 @@ export function TemplateForm({
 }: TemplateFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState)
 
-  const initialPreset = defaultValues?.variableSchema
-    ? detectPresetFromSchema(defaultValues.variableSchema)
-    : "image_greeting"
-
-  const [variablePreset, setVariablePreset] =
-    useState<TemplateVariablePreset>(initialPreset)
-  const [customSchemaJson, setCustomSchemaJson] = useState(
-    initialPreset === "custom" && defaultValues?.variableSchema
+  const [customSchemaJson, setCustomSchemaJson] = useState(() =>
+    defaultValues?.variableSchema
       ? defaultValues.variableSchema
       : serializeVariableSchema(PRESET_VARIABLE_SCHEMAS.image_greeting)
   )
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false)
+  const [schemaRows, setSchemaRows] = useState<TemplateVariableDef[]>(() =>
+    initialSchemaRows(defaultValues?.variableSchema)
+  )
 
-  const activeSchema = useMemo(() => {
-    return schemaFromPreset(variablePreset, customSchemaJson).schema
-  }, [variablePreset, customSchemaJson])
+  function handleBuilderChange(nextSchema: TemplateVariableDef[]) {
+    setSchemaRows(nextSchema)
+    setCustomSchemaJson(serializeVariableSchema(nextSchema))
+  }
 
-  const showMediaFields = schemaHasMediaVariable(activeSchema)
+  function handleJsonChange(json: string) {
+    setCustomSchemaJson(json)
+    const parsed = parseVariableSchemaJson(json)
+    if (parsed) {
+      setSchemaRows(parsed)
+    }
+  }
 
   return (
     <Card className="max-w-2xl">
@@ -108,8 +119,11 @@ export function TemplateForm({
             />
             <ImportTwilioSchemaButton
               onImported={(data) => {
-                setVariablePreset(data.preset)
                 setCustomSchemaJson(data.variableSchemaJson)
+                const parsed = parseVariableSchemaJson(data.variableSchemaJson)
+                if (parsed) {
+                  setSchemaRows(parsed)
+                }
 
                 if (data.friendlyName) {
                   const nameInput =
@@ -141,47 +155,26 @@ export function TemplateForm({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="variablePreset">Tipo de variables</Label>
-            <select
-              id="variablePreset"
-              name="variablePreset"
-              className={selectClassName}
-              value={variablePreset}
-              onChange={(e) =>
-                setVariablePreset(e.target.value as TemplateVariablePreset)
-              }
-            >
-              {TEMPLATE_VARIABLE_PRESETS.map((preset) => (
-                <option key={preset} value={preset}>
-                  {presetLabel(preset)}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              Debe coincidir con los placeholders {"{{1}}"}, {"{{2}}"}, etc. de
-              la plantilla aprobada en Twilio.
-            </p>
-          </div>
-
-          {variablePreset === "custom" && (
-            <div className="space-y-2">
-              <Label htmlFor="variableSchemaJson">Esquema (JSON)</Label>
-              <textarea
-                id="variableSchemaJson"
-                name="variableSchemaJson"
-                className="min-h-40 w-full rounded-md border border-input bg-input/20 px-2 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                value={customSchemaJson}
-                onChange={(e) => setCustomSchemaJson(e.target.value)}
-                spellCheck={false}
-              />
-              <p className="text-xs text-muted-foreground">
-                Array de objetos con <code>key</code>, <code>label</code>,{" "}
-                <code>kind</code> (<code>static</code>, <code>employee</code>,{" "}
-                <code>media</code>).
-              </p>
-            </div>
-          )}
+          <TemplateVariableBuilder
+            schema={schemaRows}
+            onChange={handleBuilderChange}
+            showJson={showAdvancedJson}
+            jsonValue={customSchemaJson}
+            onJsonChange={handleJsonChange}
+          />
+          <input
+            type="hidden"
+            name="variableSchemaJson"
+            value={customSchemaJson}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAdvancedJson((value) => !value)}
+          >
+            {showAdvancedJson ? "Ocultar JSON" : "Editar JSON (avanzado)"}
+          </Button>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -230,42 +223,6 @@ export function TemplateForm({
               </select>
             </div>
           </div>
-
-          {showMediaFields && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="mediaBaseUrl">Prefijo de URL de imagen</Label>
-                <Input
-                  id="mediaBaseUrl"
-                  name="mediaBaseUrl"
-                  defaultValue={
-                    defaultValues?.mediaBaseUrl ?? DEFAULT_MEDIA_BASE_URL
-                  }
-                  placeholder={DEFAULT_MEDIA_BASE_URL}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Parte fija de la Media URL en Twilio, antes del path en la
-                  variable de tipo media. Por defecto usa el CDN de Grupo HSEQ.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="mediaFileName">
-                  Archivo multimedia por defecto
-                </Label>
-                <Input
-                  id="mediaFileName"
-                  name="mediaFileName"
-                  defaultValue={defaultValues?.mediaFileName ?? ""}
-                  placeholder="jor-ambiental-ghseq.png"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Solo el nombre del archivo si Twilio concatena prefijo + path.
-                  Puede sobreescribirse al crear una campaña.
-                </p>
-              </div>
-            </>
-          )}
 
           <div className="space-y-2">
             <Label htmlFor="companyId">Empresa (opcional)</Label>

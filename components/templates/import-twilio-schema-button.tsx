@@ -4,12 +4,10 @@ import { useState, useTransition } from "react"
 import { Download } from "lucide-react"
 
 import { importTemplateSchemaFromTwilio } from "@/lib/actions/templates"
-import type { TemplateVariablePreset } from "@/lib/messaging/template-variable-schema"
 import { Button } from "@/components/ui/button"
 
 type ImportTwilioSchemaButtonProps = {
   onImported: (data: {
-    preset: TemplateVariablePreset
     variableSchemaJson: string
     friendlyName?: string
     language?: string
@@ -41,14 +39,13 @@ export function ImportTwilioSchemaButton({
         return
       }
 
-      if (!result.preset || !result.variableSchemaJson) {
+      if (!result.variableSchemaJson) {
         setIsError(true)
         setMessage("Twilio no devolvió un esquema utilizable.")
         return
       }
 
       onImported({
-        preset: result.preset,
         variableSchemaJson: result.variableSchemaJson,
         friendlyName: result.friendlyName,
         language: result.language,

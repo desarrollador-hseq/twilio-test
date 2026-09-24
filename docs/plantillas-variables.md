@@ -11,12 +11,9 @@ Guía para registrar plantillas de Twilio Content y usarlas en campañas sin cam
 
 1. Ve a **Plantillas → Nueva**.
 2. Pega el **Content SID**.
-3. Elige el **tipo de variables**:
-   - **Saludo + imagen**: `{{1}}` nombre del empleado (automático), `{{2}}` path de media (campaña o default).
-   - **Microcurso + enlace**: `{{1}}` nombre del curso, `{{2}}` URL de acceso (se piden al crear la campaña).
-   - **Personalizado**: JSON con `key`, `label`, `kind` (`static`, `employee`, `media`).
+3. Configura el **armador de variables**: por cada `{{n}}` elige origen (nombre, área, empresa, texto/URL de campaña, media). Puedes usar los botones de ejemplo o importar desde Twilio. JSON avanzado opcional.
 4. Opcional: **Importar variables desde Twilio** (requiere credenciales Twilio en `.env`). Revisa el esquema sugerido antes de guardar.
-5. Si el esquema incluye **media**, configura prefijo CDN y archivo por defecto.
+5. En variables **Imagen o video** del armador, configura prefijo CDN (p. ej. `…/ws/`) y archivo por defecto por cada `{{n}}`.
 
 ## 3. Campaña masiva
 
@@ -54,7 +51,8 @@ Guía para registrar plantillas de Twilio Content y usarlas en campañas sin cam
 | kind       | Quién lo completa                          |
 |-----------|-----------------------------------------------|
 | `static`  | Campaña o envío individual / API              |
-| `employee`| App (nombre del destinatario)                 |
+| `employee`| App (nombre, apellidos, email, área, etc.)    |
+| `company` | App (razón social del empleado)               |
 | `media`   | Archivo de campaña o default de la plantilla  |
 
 Código relacionado: `lib/messaging/template-variable-schema.ts`, `lib/messaging/twilio-content-schema.ts`.

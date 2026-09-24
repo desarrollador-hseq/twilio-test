@@ -6,6 +6,7 @@ import type { ActionState } from "@/lib/actions/types"
 import { CampaignMediaImage } from "@/components/campaigns/campaign-media-image"
 import { resolveMediaSource } from "@/lib/messaging/content-variables"
 import {
+  enrichSchemaWithLegacyTemplateMedia,
   resolveTemplateVariableSchema,
   schemaHasMediaVariable,
   schemaStaticVariables,
@@ -105,6 +106,20 @@ export function CampaignForm({
     [selectedTemplate?.variableSchema]
   )
 
+  const enrichedTemplateSchema = useMemo(
+    () =>
+      enrichSchemaWithLegacyTemplateMedia(
+        templateSchema,
+        selectedTemplate?.mediaBaseUrl,
+        selectedTemplate?.mediaFileName
+      ),
+    [
+      templateSchema,
+      selectedTemplate?.mediaBaseUrl,
+      selectedTemplate?.mediaFileName,
+    ]
+  )
+
   const staticVariables = useMemo(
     () => schemaStaticVariables(templateSchema),
     [templateSchema]
@@ -112,10 +127,15 @@ export function CampaignForm({
 
   const usesMedia = schemaHasMediaVariable(templateSchema)
 
+  const primaryMediaDef = useMemo(
+    () => enrichedTemplateSchema.find((def) => def.kind === "media"),
+    [enrichedTemplateSchema]
+  )
+
   const templatePreview = resolveMediaSource(
     null,
-    selectedTemplate?.mediaFileName,
-    selectedTemplate?.mediaBaseUrl
+    primaryMediaDef?.mediaFileName ?? selectedTemplate?.mediaFileName,
+    primaryMediaDef?.mediaBaseUrl ?? selectedTemplate?.mediaBaseUrl
   )
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -394,10 +414,13 @@ export function CampaignForm({
                   <p className="text-xs text-muted-foreground">
                     Vista previa de la plantilla (se usa si no subes archivo):
                   </p>
-                  <CampaignMediaImage
-                    mediaFileName={templatePreview.fileName}
-                    mediaBaseUrl={selectedTemplate?.mediaBaseUrl}
-                    source={templatePreview.source}
+                <CampaignMediaImage
+                  mediaFileName={templatePreview.fileName}
+                  mediaBaseUrl={
+                    primaryMediaDef?.mediaBaseUrl ??
+                    selectedTemplate?.mediaBaseUrl
+                  }
+                  source={templatePreview.source}
                     size="lg"
                     showMeta
                   />
@@ -407,9 +430,14 @@ export function CampaignForm({
                 Imagen (JPG, PNG, GIF, WEBP hasta 5 MB) o video (MP4, WEBM, MOV
                 hasta 16 MB). Se sube a DigitalOcean Spaces. Si no subes
                 archivo, se usa el de la plantilla
-                {selectedTemplate?.mediaFileName ? (
+                {primaryMediaDef?.mediaFileName ||
+                selectedTemplate?.mediaFileName ? (
                   <>
-                    : <code>{selectedTemplate.mediaFileName}</code>
+                    :{" "}
+                    <code>
+                      {primaryMediaDef?.mediaFileName ??
+                        selectedTemplate?.mediaFileName}
+                    </code>
                   </>
                 ) : (
                   "."
@@ -419,10 +447,12 @@ export function CampaignForm({
           )}
 
           {selectedTemplate &&
-            templateSchema.some((def) => def.kind === "employee") && (
+            templateSchema.some(
+              (def) => def.kind === "employee" || def.kind === "company"
+            ) && (
               <p className="text-xs text-muted-foreground">
-                Las variables de empleado se completan automáticamente al enviar
-                (nombre de cada destinatario).
+                Las variables de empleado y empresa se completan automáticamente
+                al enviar (datos de cada destinatario).
               </p>
             )}
         </CardContent>

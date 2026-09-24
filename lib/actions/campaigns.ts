@@ -10,7 +10,7 @@ import { formatTwilioError } from "@/lib/twilio-errors"
 import { CAMPAIGN_CHANNELS } from "@/lib/messaging/constants"
 import {
   buildContentVariablesForTemplate,
-  resolveMediaFileName,
+  recipientFromEmployeeRecord,
 } from "@/lib/messaging/content-variables"
 import {
   parseCampaignStaticVariables,
@@ -258,15 +258,8 @@ export async function launchCampaign(campaignId: number) {
     campaign.contentVariables
   )
 
-  const mediaFileName = schemaHasMediaVariable(schema)
-    ? resolveMediaFileName(
-        campaign.mediaFileName,
-        campaign.template.mediaFileName,
-        campaign.template.mediaBaseUrl
-      )
-    : null
-
   const selectedAreaIds = campaign.areas.map((item) => item.areaId)
+  const usesMedia = schemaHasMediaVariable(schema)
 
   const employees = await prisma.employee.findMany({
     where: {
@@ -280,6 +273,10 @@ export async function launchCampaign(campaignId: number) {
         : {
             areaId: { in: selectedAreaIds },
           }),
+    },
+    include: {
+      company: true,
+      area: true,
     },
   })
 
@@ -300,13 +297,15 @@ export async function launchCampaign(campaignId: number) {
   let failureCount = 0
 
   for (const employee of employees) {
+    const recipient = recipientFromEmployeeRecord(employee)
     const built = buildContentVariablesForTemplate(
       campaign.template.variableSchema,
-      employee,
+      recipient,
       {
         campaignStaticVars,
-        mediaFileName,
-        mediaBaseUrl: campaign.template.mediaBaseUrl,
+        campaignMediaFileName: usesMedia ? campaign.mediaFileName : null,
+        templateMediaBaseUrl: campaign.template.mediaBaseUrl,
+        templateMediaFileName: campaign.template.mediaFileName,
       }
     )
 
@@ -404,6 +403,10 @@ export async function sendIndividualMessage(
       canSendWhatsapp: true,
       NOT: { mobilePhone: "" },
     },
+    include: {
+      company: true,
+      area: true,
+    },
   })
 
   if (!employee) {
@@ -432,21 +435,13 @@ export async function sendIndividualMessage(
     return { error: staticError }
   }
 
-  const mediaFileName = schemaHasMediaVariable(schema)
-    ? resolveMediaFileName(
-        null,
-        template.mediaFileName,
-        template.mediaBaseUrl
-      )
-    : null
-
   const built = buildContentVariablesForTemplate(
     template.variableSchema,
-    employee,
+    recipientFromEmployeeRecord(employee),
     {
       campaignStaticVars: staticVars,
-      mediaFileName,
-      mediaBaseUrl: template.mediaBaseUrl,
+      templateMediaBaseUrl: template.mediaBaseUrl,
+      templateMediaFileName: template.mediaFileName,
     }
   )
 

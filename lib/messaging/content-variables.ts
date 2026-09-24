@@ -1,8 +1,14 @@
 import { getSpacesCdnUrl } from "@/lib/env"
 import type { TemplateVariableDef } from "@/lib/messaging/template-variable-schema"
-import { resolveTemplateVariableSchema } from "@/lib/messaging/template-variable-schema"
+import {
+  enrichSchemaWithLegacyTemplateMedia,
+  resolveTemplateVariableSchema,
+} from "@/lib/messaging/template-variable-schema"
 
-export const DEFAULT_MEDIA_BASE_URL = `${getSpacesCdnUrl().replace(/\/$/, "")}/ccomercial/`
+/** Carpeta en el CDN usada en la Media URL de Twilio (prefijo + {{n}}). */
+export const DEFAULT_MEDIA_CDN_FOLDER = "ws"
+
+export const DEFAULT_MEDIA_BASE_URL = `${getSpacesCdnUrl().replace(/\/$/, "")}/${DEFAULT_MEDIA_CDN_FOLDER}/`
 
 function isAbsoluteMediaUrl(value: string) {
   return (
@@ -15,9 +21,12 @@ function isAbsoluteMediaUrl(value: string) {
 /** @deprecated Usa DEFAULT_MEDIA_BASE_URL */
 export const MEDIA_CDN_BASE_URL = DEFAULT_MEDIA_BASE_URL
 
-type EmployeeNameSource = {
+export type MessageRecipientContext = {
   firstName: string
-  lastName?: string
+  lastName: string
+  email: string
+  areaName?: string | null
+  companyLegalName: string
 }
 
 export type MediaSource = "campaign" | "template"
@@ -127,8 +136,10 @@ export function resolveMediaSource(
 
 export type BuildContentVariablesContext = {
   campaignStaticVars?: Record<string, string> | null
-  mediaFileName?: string | null
-  mediaBaseUrl?: string | null
+  /** Archivo subido en campaña; aplica a variables media del esquema */
+  campaignMediaFileName?: string | null
+  templateMediaBaseUrl?: string | null
+  templateMediaFileName?: string | null
 }
 
 export function resolveMediaFileName(
@@ -142,14 +153,52 @@ export function resolveMediaFileName(
   )
 }
 
-function employeeNameForDef(
-  employee: EmployeeNameSource,
+export function recipientFromEmployeeRecord(employee: {
+  firstName: string
+  lastName: string
+  email: string
+  company: { legalName: string }
+  area?: { name: string } | null
+}): MessageRecipientContext {
+  return {
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    email: employee.email,
+    areaName: employee.area?.name ?? null,
+    companyLegalName: employee.company.legalName,
+  }
+}
+
+function resolveDynamicVariableValue(
+  recipient: MessageRecipientContext,
   def: TemplateVariableDef
 ): string {
-  const useFullName = def.source === "fullName"
-  return useFullName
-    ? [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim()
-    : employee.firstName.trim()
+  if (def.kind === "employee") {
+    switch (def.source) {
+      case "lastName":
+        return recipient.lastName.trim()
+      case "fullName":
+        return [recipient.firstName, recipient.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+      case "email":
+        return recipient.email.trim()
+      case "areaName":
+        return recipient.areaName?.trim() ?? ""
+      case "firstName":
+      default:
+        return recipient.firstName.trim()
+    }
+  }
+
+  if (def.kind === "company") {
+    if (def.source === "legalName" || !def.source) {
+      return recipient.companyLegalName.trim()
+    }
+  }
+
+  return ""
 }
 
 export function validateBuiltContentVariables(
@@ -170,7 +219,7 @@ export function validateBuiltContentVariables(
 
 export function buildContentVariables(
   schema: TemplateVariableDef[],
-  employee: EmployeeNameSource,
+  recipient: MessageRecipientContext,
   context: BuildContentVariablesContext = {}
 ): Record<string, string> | undefined {
   const variables: Record<string, string> = {}
@@ -185,20 +234,28 @@ export function buildContentVariables(
       continue
     }
 
-    if (def.kind === "employee") {
-      const name = employeeNameForDef(employee, def)
-      if (name) {
-        variables[def.key] = name
+    if (def.kind === "employee" || def.kind === "company") {
+      const value = resolveDynamicVariableValue(recipient, def)
+      if (value) {
+        variables[def.key] = value
       }
       continue
     }
 
     if (def.kind === "media") {
-      const mediaValue = context.mediaFileName?.trim()
-      if (mediaValue) {
+      const mediaBaseUrl =
+        def.mediaBaseUrl ??
+        context.templateMediaBaseUrl ??
+        DEFAULT_MEDIA_BASE_URL
+      const resolvedFileName = resolveMediaFileName(
+        context.campaignMediaFileName,
+        def.mediaFileName ?? context.templateMediaFileName,
+        mediaBaseUrl
+      )
+      if (resolvedFileName) {
         const twilioMediaPath = normalizeMediaFileName(
-          mediaValue,
-          context.mediaBaseUrl
+          resolvedFileName,
+          mediaBaseUrl
         )
         if (twilioMediaPath) {
           // La plantilla de Twilio ya concatena mediaBaseUrl + {{n}}.
@@ -218,11 +275,15 @@ export type BuildContentVariablesResult = {
 
 export function buildContentVariablesForTemplate(
   variableSchema: string | null | undefined,
-  employee: EmployeeNameSource,
+  recipient: MessageRecipientContext,
   context: BuildContentVariablesContext = {}
 ): BuildContentVariablesResult {
-  const schema = resolveTemplateVariableSchema(variableSchema)
-  const variables = buildContentVariables(schema, employee, context)
+  const schema = enrichSchemaWithLegacyTemplateMedia(
+    resolveTemplateVariableSchema(variableSchema),
+    context.templateMediaBaseUrl,
+    context.templateMediaFileName
+  )
+  const variables = buildContentVariables(schema, recipient, context)
   if (!variables) {
     return {
       error: "No hay variables de contenido para enviar.",

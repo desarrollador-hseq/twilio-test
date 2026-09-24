@@ -6,9 +6,19 @@ export const TEMPLATE_VARIABLE_PRESETS = [
 
 export type TemplateVariablePreset = (typeof TEMPLATE_VARIABLE_PRESETS)[number]
 
-export type TemplateVariableKind = "static" | "employee" | "media"
+export type TemplateVariableKind = "static" | "employee" | "company" | "media"
 export type TemplateVariableInput = "text" | "url" | "textarea"
+export type EmployeeSourceField =
+  | "firstName"
+  | "lastName"
+  | "fullName"
+  | "email"
+  | "areaName"
+
+/** @deprecated Usa EmployeeSourceField */
 export type EmployeeNameSourceField = "firstName" | "fullName"
+
+export type CompanySourceField = "legalName"
 
 export type TemplateVariableDef = {
   key: string
@@ -16,7 +26,11 @@ export type TemplateVariableDef = {
   kind: TemplateVariableKind
   required?: boolean
   input?: TemplateVariableInput
-  source?: EmployeeNameSourceField
+  source?: EmployeeSourceField | CompanySourceField
+  /** Solo kind media: prefijo CDN en Twilio antes de {{n}} */
+  mediaBaseUrl?: string | null
+  /** Solo kind media: nombre de archivo por defecto (path relativo al prefijo) */
+  mediaFileName?: string | null
 }
 
 export const PRESET_VARIABLE_SCHEMAS: Record<
@@ -56,9 +70,21 @@ export const PRESET_VARIABLE_SCHEMAS: Record<
   ],
 }
 
-const VALID_KINDS: TemplateVariableKind[] = ["static", "employee", "media"]
+const VALID_KINDS: TemplateVariableKind[] = [
+  "static",
+  "employee",
+  "company",
+  "media",
+]
 const VALID_INPUTS: TemplateVariableInput[] = ["text", "url", "textarea"]
-const VALID_SOURCES: EmployeeNameSourceField[] = ["firstName", "fullName"]
+const VALID_EMPLOYEE_SOURCES: EmployeeSourceField[] = [
+  "firstName",
+  "lastName",
+  "fullName",
+  "email",
+  "areaName",
+]
+const VALID_COMPANY_SOURCES: CompanySourceField[] = ["legalName"]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -109,11 +135,36 @@ function parseVariableDef(raw: unknown): TemplateVariableDef | null {
     const source = raw.source
     if (
       typeof source === "string" &&
-      VALID_SOURCES.includes(source as EmployeeNameSourceField)
+      VALID_EMPLOYEE_SOURCES.includes(source as EmployeeSourceField)
     ) {
-      def.source = source as EmployeeNameSourceField
+      def.source = source as EmployeeSourceField
+    } else if (source === "fullName" || source === "firstName") {
+      def.source = source
     } else {
       def.source = "firstName"
+    }
+  }
+
+  if (kind === "company") {
+    const source = raw.source
+    if (
+      typeof source === "string" &&
+      VALID_COMPANY_SOURCES.includes(source as CompanySourceField)
+    ) {
+      def.source = source as CompanySourceField
+    } else {
+      def.source = "legalName"
+    }
+  }
+
+  if (kind === "media") {
+    const mediaBaseUrl = raw.mediaBaseUrl
+    const mediaFileName = raw.mediaFileName
+    if (typeof mediaBaseUrl === "string" && mediaBaseUrl.trim()) {
+      def.mediaBaseUrl = mediaBaseUrl.trim()
+    }
+    if (typeof mediaFileName === "string" && mediaFileName.trim()) {
+      def.mediaFileName = mediaFileName.trim()
     }
   }
 
@@ -176,6 +227,9 @@ export function validateVariableSchema(schema: TemplateVariableDef[]): string | 
     }
     if (def.kind === "employee" && def.input) {
       return `La variable {{${def.key}}} de empleado no usa "input".`
+    }
+    if (def.kind === "company" && def.input) {
+      return `La variable {{${def.key}}} de empresa no usa "input".`
     }
     if (def.kind === "media" && (def.input || def.source)) {
       return `La variable {{${def.key}}} de media no usa "input" ni "source".`
@@ -243,6 +297,48 @@ export function schemaHasMediaVariable(schema: TemplateVariableDef[]): boolean {
   return schema.some((def) => def.kind === "media")
 }
 
+export function getMediaVariableDefs(
+  schema: TemplateVariableDef[]
+): TemplateVariableDef[] {
+  return schema.filter((def) => def.kind === "media")
+}
+
+/** Compatibilidad: columnas legacy en Template → variables media del esquema. */
+export function enrichSchemaWithLegacyTemplateMedia(
+  schema: TemplateVariableDef[],
+  templateMediaBaseUrl?: string | null,
+  templateMediaFileName?: string | null
+): TemplateVariableDef[] {
+  if (!templateMediaBaseUrl && !templateMediaFileName) {
+    return schema
+  }
+
+  return schema.map((def) => {
+    if (def.kind !== "media") {
+      return def
+    }
+    return {
+      ...def,
+      mediaBaseUrl: def.mediaBaseUrl ?? templateMediaBaseUrl ?? null,
+      mediaFileName: def.mediaFileName ?? templateMediaFileName ?? null,
+    }
+  })
+}
+
+export function legacyTemplateMediaFromSchema(schema: TemplateVariableDef[]): {
+  mediaBaseUrl: string | null
+  mediaFileName: string | null
+} {
+  const firstMedia = schema.find((def) => def.kind === "media")
+  if (!firstMedia) {
+    return { mediaBaseUrl: null, mediaFileName: null }
+  }
+  return {
+    mediaBaseUrl: firstMedia.mediaBaseUrl ?? null,
+    mediaFileName: firstMedia.mediaFileName ?? null,
+  }
+}
+
 export function schemaStaticVariables(
   schema: TemplateVariableDef[]
 ): TemplateVariableDef[] {
@@ -256,7 +352,7 @@ export function presetLabel(preset: TemplateVariablePreset): string {
     case "course_link":
       return "Microcurso + enlace ({{1}} curso, {{2}} URL)"
     case "custom":
-      return "Personalizado (JSON)"
+      return "Armador (variables por placeholder)"
   }
 }
 
@@ -266,9 +362,20 @@ export function variableKindLabel(kind: TemplateVariableKind): string {
       return "Valor fijo (campaña)"
     case "employee":
       return "Empleado (automático)"
+    case "company":
+      return "Empresa (automático)"
     case "media":
       return "Multimedia"
   }
+}
+
+export function schemaDynamicVariables(
+  schema: TemplateVariableDef[]
+): TemplateVariableDef[] {
+  return schema.filter(
+    (def) =>
+      def.kind === "employee" || def.kind === "company" || def.kind === "media"
+  )
 }
 
 export function validateStaticVariables(
@@ -322,6 +429,24 @@ export function parseCampaignStaticVariables(
       formData.get(`contentVar_${def.key}`)?.toString() ?? ""
   }
   return validateStaticVariables(schema, rawValues)
+}
+
+export function parseAndValidateVariableSchemaJson(
+  json: string | null | undefined
+): { schema: TemplateVariableDef[]; error: string | null } {
+  const parsed = parseVariableSchemaJson(json ?? "")
+  if (!parsed) {
+    return {
+      schema: [],
+      error:
+        "Esquema de variables inválido. Revisa el armador o el JSON avanzado.",
+    }
+  }
+  const validationError = validateVariableSchema(parsed)
+  if (validationError) {
+    return { schema: [], error: validationError }
+  }
+  return { schema: parsed, error: null }
 }
 
 export function parseStoredContentVariables(
