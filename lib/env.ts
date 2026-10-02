@@ -48,6 +48,60 @@ export function getInboundWebhookUrl() {
   return getPublicWebhookUrl("/api/webhooks/twilio/inbound")
 }
 
+function parsePositiveIntEnv(value: string | undefined) {
+  const raw = value?.trim()
+  if (!raw) {
+    return null
+  }
+  const id = Number(raw)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+/** ID interno (tabla Plantillas) para POST /api/messages/notification */
+export function getNotificationTemplateIdFromEnv() {
+  return (
+    parsePositiveIntEnv(process.env.NOTIFICATION_TEMPLATE_ID) ??
+    parsePositiveIntEnv(process.env.ALERT_TEMPLATE_ID)
+  )
+}
+
+/** Content SID de Twilio; la app busca la plantilla registrada con ese SID */
+export function getNotificationContentSidFromEnv() {
+  return (
+    process.env.NOTIFICATION_CONTENT_SID?.trim() ||
+    process.env.ALERT_CONTENT_SID?.trim() ||
+    null
+  )
+}
+
+/** Clave del placeholder estático (p. ej. "1" → {{1}}) con el texto de la notificación */
+export function getNotificationTemplateTextVariableKey() {
+  return (
+    process.env.NOTIFICATION_TEMPLATE_TEXT_VARIABLE_KEY?.trim() ||
+    process.env.ALERT_TEMPLATE_TEXT_VARIABLE_KEY?.trim() ||
+    "1"
+  )
+}
+
+/** @deprecated Usa getNotificationTemplateIdFromEnv */
+export function getAlertTemplateId() {
+  return getNotificationTemplateIdFromEnv()
+}
+
+/** @deprecated Usa getNotificationTemplateTextVariableKey */
+export function getAlertTemplateTextVariableKey() {
+  return getNotificationTemplateTextVariableKey()
+}
+
+/** Plantilla detallada: POST /api/messages/hseqcloud/notification-detail */
+export function getDetailedNotificationTemplateIdFromEnv() {
+  return parsePositiveIntEnv(process.env.DETAILED_NOTIFICATION_TEMPLATE_ID)
+}
+
+export function getDetailedNotificationContentSidFromEnv() {
+  return process.env.DETAILED_NOTIFICATION_CONTENT_SID?.trim() || null
+}
+
 export function isTwilioConfigured() {
   const hasSender = Boolean(
     process.env.TWILIO_WHATSAPP_FROM?.trim() ||

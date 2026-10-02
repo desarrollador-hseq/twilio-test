@@ -212,9 +212,15 @@ export default async function CampanaDetallePage({
                   {campaign.messages.map((message) => (
                     <TableRow key={message.id}>
                       <TableCell>
-                        {message.employee.firstName} {message.employee.lastName}
+                        {message.employee
+                          ? `${message.employee.firstName} ${message.employee.lastName}`
+                          : "— (API)"}
                       </TableCell>
-                      <TableCell>{message.employee.mobilePhone}</TableCell>
+                      <TableCell>
+                        {message.employee?.mobilePhone ??
+                          message.recipientPhone ??
+                          "—"}
+                      </TableCell>
                       <TableCell>
                         <Badge
                           variant={

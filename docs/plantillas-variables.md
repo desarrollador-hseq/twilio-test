@@ -24,7 +24,7 @@ Guía para registrar plantillas de Twilio Content y usarlas en campañas sin cam
 ## 4. Envío individual o prueba
 
 - **UI**: en el detalle de la plantilla, **Enviar prueba** (`/plantillas/[id]/enviar`).
-- **API**: `POST /api/messages/send` con cuerpo JSON:
+- **API**: `POST /api/messages/send` con token de aplicación registrada (ver **Integraciones** en la app) y cuerpo JSON:
 
 ```json
 {
@@ -38,6 +38,69 @@ Guía para registrar plantillas de Twilio Content y usarlas en campañas sin cam
 ```
 
 `contentVariables` cubre las variables **static** del esquema. Variables `employee` y `media` se resuelven como en campañas.
+
+### Notificaciones desde otra aplicación
+
+Plantilla típica en Twilio (utility/notificación):
+
+- Cuerpo: `Notificación: {{1}}` + firma fija `Grupo HSEQ`
+- Content SID de ejemplo: `HXd3c876275a784751fb9e7d200aaf7fc9`
+- En **Plantillas → Nueva**: pega el Content SID y define una sola variable estática `{{1}}` (texto de la notificación). Puedes importar el esquema desde Twilio o usar JSON:
+
+```json
+[
+  {
+    "key": "1",
+    "label": "Texto de la notificación",
+    "kind": "static",
+    "input": "textarea",
+    "required": true
+  }
+]
+```
+
+Flujo:
+
+1. **Integraciones**: el administrador registra la app externa y copia el token.
+2. **API**: `POST /api/messages/notification` con `Authorization: Bearer <token>` o `X-API-Key: <token>`.
+3. En `.env`: `NOTIFICATION_CONTENT_SID` (la app la registra sola en Plantillas la primera vez que envías; también puedes crearla manualmente). El texto va en `text` → `{{1}}`. **Reinicia el servidor** tras cambiar `.env`.
+
+```json
+{
+  "phone": "3001234567",
+  "text": "Se te asignó el presupuesto para el mes de febrero."
+}
+```
+
+`phone`: destinatario en E.164 o móvil Colombia (10 dígitos). **No** tiene que estar registrado como empleado; se envía al número indicado (sujeto a reglas de WhatsApp/Twilio).
+
+El mensaje al usuario quedará: *Notificación: Se te asignó…* + *Grupo HSEQ* (según la plantilla aprobada).
+
+Opcional: `"templateId"` en el cuerpo para otra plantilla.
+
+### HSEQ Cloud — notificación detallada (app externa)
+
+Plantilla con saludo, empresa, asunto y cuerpo (`{{1}}`–`{{4}}`):
+
+- **API**: `POST /api/messages/hseqcloud/notification-detail` (mismo token de Integraciones).
+- **`.env`**: `DETAILED_NOTIFICATION_CONTENT_SID=<Content SID HX…>`.
+
+```json
+{
+  "phone": "3001234567",
+  "recipientName": "María García",
+  "companyName": "Logística del Pacífico Ltda.",
+  "subject": "Firma pendiente en ATS",
+  "message": "Tienes una solicitud de firma para autorizar el ATS..."
+}
+```
+
+| Campo API | Variable Twilio |
+|-----------|-----------------|
+| `recipientName` | `{{1}}` |
+| `companyName` | `{{2}}` |
+| `subject` | `{{3}}` |
+| `message` | `{{4}}` |
 
 ## 5. Añadir una plantilla nueva (checklist)
 

@@ -1,5 +1,11 @@
 import Link from "next/link"
-import { Building2, FileText, LayoutDashboard, Megaphone } from "lucide-react"
+import {
+  Building2,
+  FileText,
+  KeyRound,
+  LayoutDashboard,
+  Megaphone,
+} from "lucide-react"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { Button } from "@/components/ui/button"
@@ -52,6 +58,14 @@ export async function AppShell({
               Campañas
             </Link>
           </Button>
+          {session?.user?.role === "ADMIN" && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/integraciones">
+                <KeyRound data-icon="inline-start" />
+                Integraciones
+              </Link>
+            </Button>
+          )}
           {session?.user && (
             <div className="ml-auto flex items-center gap-3">
               <div className="text-right text-xs">

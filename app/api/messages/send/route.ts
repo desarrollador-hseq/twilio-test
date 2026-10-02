@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
+
+import { authenticateMessagesApiRequest } from "@/lib/api/messages-api-auth"
 import { sendIndividualMessage } from "@/lib/actions/campaigns"
 
 export async function POST(request: NextRequest) {
+  const authResult = await authenticateMessagesApiRequest(request)
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    )
+  }
+
   const body = (await request.json()) as {
     employeeId?: number
     templateId?: number
@@ -34,5 +44,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 400 })
   }
 
-  return NextResponse.json(result)
+  return NextResponse.json({
+    ...result,
+    application: authResult.application.name,
+  })
 }
